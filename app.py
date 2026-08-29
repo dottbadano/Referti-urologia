@@ -36,7 +36,6 @@ def genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_paziente):
 if "db_pazienti" not in st.session_state:
     st.session_state["db_pazienti"] = {}
 
-# Lista Mesi per il Selectbox
 ELENCO_MESI = [
     "Gennaio",
     "Febbraio",
@@ -58,10 +57,7 @@ ELENCO_MESI = [
 
 
 def calcola_psadt(psa_precedente, data_precedente, psa_attuale, data_attuale):
-    """
-    Calcola il PSA Doubling Time (PSADT) in mesi basandosi sui mesi/anni del prelievo.
-    Formula: PSADT = [ln(2) * giorni_trascorsi] / ln(PSA_attuale / PSA_precedente)
-    """
+    """Calcola il PSA Doubling Time (PSADT) in mesi."""
     if (
         psa_precedente is None
         or psa_precedente <= 0
@@ -83,64 +79,137 @@ def calcola_psadt(psa_precedente, data_precedente, psa_attuale, data_attuale):
         return None
 
 
+def calcola_gruppo_rischio_eau(isup_num, psa, ct_stage, gleason_terziario):
+    """Stratificazione del Rischio EAU/NCCN."""
+    is_terziario_alto = gleason_terziario in [
+        "Pattern 5 Terziario",
+        "Pattern 4 Terziario",
+    ]
+
+    if (
+        isup_num >= 4
+        or psa > 20
+        or ct_stage in ["cT3a", "cT3b", "cT4"]
+        or is_terziario_alto
+    ):
+        return (
+            "Alto / Molto Alto Rischio",
+            True,
+            "Indicata Stadiatura Sistemica (PET/TC PSMA oppure TC Torace-Addome + Scintigrafia Ossea) per elevato rischio di micrometastasi.",
+        )
+    elif isup_num in [2, 3] or (10 <= psa <= 20) or ct_stage == "cT2b-cT2c":
+        if isup_num == 3 or (isup_num == 2 and psa > 10):
+            return (
+                "Rischio Intermedio Sfavorevole",
+                True,
+                "Indicata Stadiatura Sistemica (Preferibile PET/TC PSMA) prima di definire il trattamento definitivo.",
+            )
+        else:
+            return (
+                "Rischio Intermedio Favorevole",
+                False,
+                "Stadiatura sistemica NON indicata di routine. Paziente orientabile a trattamento locale o Sorveglianza Attiva selettiva.",
+            )
+    else:
+        return (
+            "Basso Rischio",
+            False,
+            "Stadiatura sistemica NON indicata. Candidato ideale per Sorveglianza Attiva.",
+        )
+
+
 def calcola_timing_controllo(percorso, dati):
-    """Restituisce: (Mesi al prossimo controllo, Esami raccomandati)"""
+    """
+    Restituisce raccomandazioni e tempistiche specifiche per tipo di follow-up.
+    """
     if percorso == "Sorveglianza Attiva":
         isup = dati.get("isup", 1)
         psadt = dati.get("psadt")
-        if isup > 1 or (psadt is not None and psadt < 36):
-            return (
-                3,
-                "PSA Sierico + Visita Clinica (Monitoraggio stretto per sospetta progressione/PSADT rapido)",
-            )
-        return 6, "PSA Sierico + Visita Clinica (Programmare mpRMN a 12 mesi)"
+        mesi_sa = dati.get("mesi_da_inizio_sa", 6)
+
+        # Allarmi di progressione
+        if (psadt is not None and psadt < 36) or isup > 1:
+            return {
+                "mesi_psa": 3,
+                "rec_psa": "PSA Sierico tra 3 Mesi (Monitoraggio stretto per cinetica rapida / PSADT < 36 mesi).",
+                "rec_rmn": "⚠️ Programmare mpRMN Prostatica urgente (entro 3 mesi) per valutare progressione di volume o PIRADS.",
+                "rec_bx": "⚠️ Ripetere Biopsia Prostatica di Riconferma/Re-stadiatura (Sospetto di progressione di malattia).",
+                "alert": "⚠️ ATTENZIONE: PSADT accelerato o ISUP > 1. Valutare l'uscita dalla Sorveglianza Attiva e la discussione DMT per Trattamento Radicale.",
+            }
+        else:
+            # Protocollo SA standard
+            prossima_rmn = "Programmare mpRMN Prostatica a 12 mesi dall'inizio della SA (o di controllo annuale)."
+            prossima_bx = "Programmare Biopsia Prostatica di Riconferma tra i 12 e i 24 mesi dall'arruolamento."
+            return {
+                "mesi_psa": 6,
+                "rec_psa": "PSA Sierico ogni 6 Mesi + Visita Clinica.",
+                "rec_rmn": prossima_rmn,
+                "rec_bx": prossima_bx,
+                "alert": "🟢 Cinetica del PSA nei limiti. Il paziente può proseguire in sicurezza la Sorveglianza Attiva.",
+            }
 
     elif percorso == "Chirurgia (Post-Prostatectomia)":
         psa = dati.get("psa", 0.0)
         mesi_op = dati.get("mesi_post_op", 0)
 
         if psa >= 0.20:
-            return (
-                1,
-                "⚠️ RECIDIVA BIOCHIMICA (PSA ≥ 0.20 ng/ml): Eseguire PET/TC PSMA tempestiva e richiedere consulenza Radioterapica per RT di Salvataggio.",
-            )
+            return {
+                "mesi_psa": 1,
+                "rec_psa": "PSA Sierico Ultrasensibile di riconferma a 30 giorni.",
+                "rec_imaging": "⚠️ PET/TC PSMA tempestiva per restaging di malattia.",
+                "rec_azione": "Valutazione Radioterapica urgente per Radioterapia di Salvataggio Precoce ± ADT.",
+                "alert": "🚨 RECIDIVA BIOCHIMICA CONFIRMATA (PSA ≥ 0.20 ng/ml).",
+            }
         elif mesi_op <= 12:
-            return 3, "PSA Sierico Ultrasensibile + Visita Urologica"
+            m = 3
         elif mesi_op <= 36:
-            return 6, "PSA Sierico + Visita Urologica"
-        return 12, "PSA Sierico Anno + Visita Urologica Controllo"
+            m = 6
+        else:
+            m = 12
+
+        return {
+            "mesi_psa": m,
+            "rec_psa": f"PSA Sierico Ultrasensibile tra {m} mesi + Visita Urologica.",
+            "rec_imaging": "Imaging non indicato di routine in assenza di incremento del PSA.",
+            "rec_azione": "Proseguire follow-up oncologico regolare.",
+            "alert": "🟢 PSA nei limiti di negatività (<0.20 ng/ml).",
+        }
 
     elif percorso == "Radioterapia":
         psa = dati.get("psa", 0.0)
         psa_nadir = dati.get("psa_nadir", 0.0)
         mesi_rt = dati.get("mesi_post_rt", 0)
 
-        if (psa - psa_nadir) >= 2.0:
-            return (
-                1,
-                "⚠️ RECIDIVA BIOCHIMICA PHOENIX (Nadir + 2.0 ng/ml): Programmare PET/TC PSMA e restaging sistemico per terapia di salvataggio/sistemica.",
-            )
+        if psa_nadir > 0 and (psa - psa_nadir) >= 2.0:
+            return {
+                "mesi_psa": 1,
+                "rec_psa": "PSA Sierico di riconferma a 30 giorni.",
+                "rec_imaging": "⚠️ Programmare PET/TC PSMA e TC Torace-Addome di Restaging.",
+                "rec_azione": "Discussione DMT per Terapia di Salvataggio (Localizzata) o Terapia Sistemica (ADT/ARPI).",
+                "alert": "🚨 RECIDIVA BIOCHIMICA CRITERI PHOENIX (Nadir + 2.0 ng/ml).",
+            }
         elif mesi_rt <= 24:
-            return 3, "PSA Sierico + Visita Oncologica/Radioterapica"
+            m = 3
         elif mesi_rt <= 60:
-            return 6, "PSA Sierico + Visita Clinica"
-        return 12, "PSA Sierico Anno + Visita Clinica"
+            m = 6
+        else:
+            m = 12
 
-    elif percorso in ["Terapia Medica / Metastatico", "Avanzato/Metastatico"]:
-        progressione = dati.get("progressione", False)
-        crpc = dati.get("crpc", False)
+        return {
+            "mesi_psa": m,
+            "rec_psa": f"PSA Sierico tra {m} mesi + Visita Radioterapica / Oncologica.",
+            "rec_imaging": "Imaging non indicato di routine in assenza di incremento sospetto.",
+            "rec_azione": "Proseguire il monitoraggio del Nadir del PSA.",
+            "alert": "🟢 Cinetica del PSA stabile / post-attinica regolare.",
+        }
 
-        if crpc or progressione:
-            return (
-                2,
-                "PSA + Testosterone Sierico (<50 ng/dL) + Imaging di Restaging (TC Addome/Torace + Scintigrafia od eventuale PET PSMA) + Valutazione test BRCA/HRR.",
-            )
-        return (
-            3,
-            "PSA + Testosterone Sierico + Valutazione Tollerabilità/Tossicità Terapeutica",
-        )
-
-    return 6, "PSA Sierico + Visita Clinica Standard"
+    return {
+        "mesi_psa": 6,
+        "rec_psa": "PSA Sierico + Visita di controllo tra 6 Mesi.",
+        "rec_imaging": "Sulla base del quadro clinico.",
+        "rec_azione": "Standard.",
+        "alert": "Info standard.",
+    }
 
 
 # ==============================================================================
@@ -168,17 +237,18 @@ if organo_selezionato == "🧬 PROSTATA":
     modalita = st.radio(
         "Seleziona Fase del Patient Journey:",
         [
-            "1. Primo Inquadramento DMT & Stadiatura Basale",
-            "2. Richiama Paziente / Inserisci Nuova Visita",
+            "1. Prima Visita: Inquadramento Bioptico & Rischio",
+            "2. Seconda Visita / DMT: Referto Stadiatura & Decisione",
+            "3. Controllo Successivo / Follow-up PSA",
         ],
         horizontal=True,
     )
 
     # --------------------------------------------------------------------------
-    # FASE 1: PRIMO INQUADRAMENTO DMT BASALE
+    # FASE 1: PRIMA VISITA
     # --------------------------------------------------------------------------
-    if modalita == "1. Primo Inquadramento DMT & Stadiatura Basale":
-        st.subheader("📋 Inserimento Dati Paziente & Anagrafica Locale")
+    if modalita == "1. Prima Visita: Inquadramento Bioptico & Rischio":
+        st.subheader("📋 Inserimento Anagrafica Paziente")
 
         col_a, col_b = st.columns(2)
         with col_a:
@@ -195,12 +265,14 @@ if organo_selezionato == "🧬 PROSTATA":
             st.info(f"🔑 **Codice Univoco Generato:** `{codice_paziente}`")
 
         st.markdown("---")
-        st.subheader("📊 Stadiatura Clinica e Quadro di Rischio")
+        st.subheader(
+            "🔬 Dati Bioptici, Clinici e Imaging Iniziale (mpRMN)"
+        )
 
         col1, col2, col3 = st.columns(3)
         with col1:
             isup_basale = st.selectbox(
-                "ISUP Group Bioptico (Gleason):",
+                "ISUP Group Bioptico (Gleason Score):",
                 [
                     "ISUP 1 (Gleason 3+3)",
                     "ISUP 2 (Gleason 3+4)",
@@ -211,8 +283,16 @@ if organo_selezionato == "🧬 PROSTATA":
             )
             isup_num = int(isup_basale.split()[1])
 
-            # DATA PRELIEVO PSA BASALE - SOLO MESE E ANNO
-            st.markdown("🗓️ **Mese e Anno Prelievo PSA Basale:**")
+            gleason_terziario = st.selectbox(
+                "Gleason Pattern Terziario:",
+                [
+                    "Assente",
+                    "Pattern 4 Terziario",
+                    "Pattern 5 Terziario",
+                ],
+            )
+
+            st.markdown("🗓️ **Mese e Anno Prelievo PSA:**")
             col_m, col_y = st.columns(2)
             with col_m:
                 mese_psa_b = st.selectbox(
@@ -226,95 +306,85 @@ if organo_selezionato == "🧬 PROSTATA":
                     value=datetime.today().year,
                 )
 
-            # Converti in oggetto datetime (primo giorno del mese)
             num_mese_b = ELENCO_MESI.index(mese_psa_b) + 1
             data_psa_basale = datetime(anno_psa_b, num_mese_b, 1).date()
-
             psa_basale = st.number_input(
                 "PSA Basale (ng/ml)", value=6.5, step=0.1
             )
 
         with col2:
-            imaging_stadiativo = st.multiselect("Imaging Stadiativo Eseguito:", [
-                "PET/TC PSMA",
-                "TC Addome Completo e Torace",
-                "Scintigrafia Ossea Total-Body",
-                "mpRMN Prostatica",
-            ])
-            c_n = st.selectbox(
-                "Stadio Linfonodale Clinico (cN):",
-                ["cN0", "cN1 (Linfonodi Pelvici Positivi)", "cNX"],
-            )
-
-        with col3:
-            c_m = st.selectbox(
-                "Stadio Metastatico Clinico (cM):",
+            ct_stage = st.selectbox(
+                "Stadio T Clinico (Esplorazione Rettale):",
                 [
-                    "cM0 (Assenza di Metastasi)",
-                    "cM1a (Linfonodi Extra-pelvici)",
-                    "cM1b (Metastasi Ossee)",
-                    "cM1c (Metastasi Viscerali)",
+                    "cT1c (Inapprezzabile)",
+                    "cT2a (≤ metà di un lobo)",
+                    "cT2b (> metà di un lobo)",
+                    "cT2c (Entrambi i lobi)",
+                    "cT3a (Estensione extracapsulare)",
+                    "cT3b (Invasione vescicole seminali)",
+                    "cT4 (Fissato o invasione strutture adiacenti)",
                 ],
             )
 
-        # RACCOMANDAZIONE GUIDELINE AUTOMATICA
-        raccomandazione_lg = "Sorveglianza Attiva"
-        if c_m != "cM0 (Assenza di Metastasi)":
-            raccomandazione_lg = "Terapia Medica / Metastatico"
-        elif isup_num >= 4 or psa_basale > 20 or c_n == "cN1":
-            raccomandazione_lg = (
-                "Radioterapia o Chirurgia (Alto Rischio / Multimodale)"
+            rmn_pirads = st.selectbox(
+                "Reperto mpRMN Prostatica:",
+                [
+                    "PI-RADS 3",
+                    "PI-RADS 4",
+                    "PI-RADS 5",
+                    "ECE / SVI Sospetta alla RMN",
+                    "Non Eseguita",
+                ],
             )
-        elif isup_num in [2, 3]:
-            raccomandazione_lg = "Chirurgia o Radioterapia"
 
-        st.warning(
-            f"🎯 **Indicazione Linee Guida Ufficiali (EAU/NCCN):** {raccomandazione_lg}"
-        )
+        with col3:
+            st.markdown("🎯 **Valutazione Rischio & Indicazione Stadiatura**")
+            gruppo_rischio, necessita_stadiatura, motivazione_stadiatura = (
+                calcola_gruppo_rischio_eau(
+                    isup_num, psa_basale, ct_stage, gleason_terziario
+                )
+            )
+
+            st.write(f"**Classe di Rischio:** `{gruppo_rischio}`")
+
+            if necessita_stadiatura:
+                st.error("⚠️ **STADIATURA SISTEMICA INDICATA**")
+                st.caption(motivazione_stadiatura)
+                opzioni_terapeutiche = "La scelta terapeutica finale sarà definita dopo il referto della stadiatura in DMT II."
+            else:
+                st.success("✅ **STADIATURA NON INDICATA AB INITIO**")
+                st.caption(motivazione_stadiatura)
+                if gruppo_rischio == "Basso Rischio":
+                    opzioni_terapeutiche = "Opzioni consigliate: Sorveglianza Attiva (Gold Standard), Radioterapia, Prostatectomia Radicale."
+                else:
+                    opzioni_terapeutiche = "Opzioni consigliate: Prostatectomia Radicale o Radioterapia."
+
+            st.info(f"💡 **Opzioni Terapeutiche Predilette:** {opzioni_terapeutiche}")
 
         st.markdown("---")
-        st.subheader("⚖️ Snodo Decisionale DMT & Congruenza Terapeutica")
 
-        scelta_trattamento = st.selectbox(
-            "Trattamento Concordato in DMT / Scelto dal Paziente:",
-            [
-                "Sorveglianza Attiva",
-                "Chirurgia (Post-Prostatectomia)",
-                "Radioterapia",
-                "Terapia Medica / Metastatico",
-            ],
-        )
-
-        deviazione = False
-        if isup_num >= 4 and scelta_trattamento == "Sorveglianza Attiva":
-            deviazione = True
-        elif (
-            c_m != "cM0 (Assenza di Metastasi)"
-            and scelta_trattamento
-            in ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)"]
-        ):
-            deviazione = True
-
-        motivazione_clinica = ""
-        if deviazione:
-            st.error(
-                "⚠️ **ATTENZIONE: La scelta terapeutica diverge dalle Linee Guida di riferimento.**"
+        if not necessita_stadiatura:
+            st.subheader("⚖️ Snodo Decisionale Immediato (Senza Stadiatura)")
+            scelta_trattamento = st.selectbox(
+                "Trattamento Concordato / Scelto:",
+                [
+                    "Sorveglianza Attiva",
+                    "Chirurgia (Post-Prostatectomia)",
+                    "Radioterapia",
+                ],
             )
-            motivazione_clinica = st.text_area(
-                "Spiegazione / Motivazione Clinica della Deviazione (Obbligatoria per Tracciabilità Medico-Legale):",
-                help="Inserire i motivi clinici, comorbilità o preferenze del paziente che hanno portato a questa scelta.",
-            )
+        else:
+            scelta_trattamento = "In attesa di Stadiatura (DMT II)"
 
-        if st.button("💾 Conferma Inquadramento e Archivia Paziente"):
-            if deviazione and not motivazione_clinica.strip():
-                st.error(
-                    "Impossibile salvare: Inserire la motivazione clinica per giustificare la deviazione dalle Linee Guida."
-                )
-            elif not nome_p or not cognome_p:
+        if st.button("💾 Salvataggio Primo Inquadramento"):
+            if not nome_p or not cognome_p:
                 st.error("Inserire Nome e Cognome del paziente.")
             else:
                 st.session_state["db_pazienti"][codice_paziente] = {
                     "isup": isup_num,
+                    "rischio": gruppo_rischio,
+                    "necessita_stadiatura": necessita_stadiatura,
+                    "stadiato": False,
                     "percorso_scelto": scelta_trattamento,
                     "ultimo_psa": psa_basale,
                     "data_ultimo_psa": data_psa_basale,
@@ -323,13 +393,8 @@ if organo_selezionato == "🧬 PROSTATA":
                     "visite": [
                         {
                             "data": str(datetime.today().date()),
-                            "tipo": "Inquadramento DMT Basale",
-                            "dettagli": f"ISUP {isup_num} | PSA: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b}) | {c_n} {c_m} | Scelta: {scelta_trattamento}"
-                            + (
-                                f" | Deviazione Note: {motivazione_clinica}"
-                                if motivazione_clinica
-                                else ""
-                            ),
+                            "tipo": "Visita I - Inquadramento Bioptico",
+                            "dettagli": f"ISUP {isup_num} | Gleason Terziario: {gleason_terziario} | PSA: {psa_basale} ({mese_psa_b} {anno_psa_b}) | {ct_stage} | Rischio: {gruppo_rischio} | Percorso: {scelta_trattamento}",
                         }
                     ],
                 }
@@ -337,53 +402,132 @@ if organo_selezionato == "🧬 PROSTATA":
                     nome_p, cognome_p, data_nascita_p, codice_paziente
                 )
                 st.success(
-                    f"Paziente archiviato con successo! Codice Univoco: {codice_paziente}."
-                )
-                st.info(
-                    "Il file 'Registro_Chiave_Pazienti.csv' è stato aggiornato sul tuo PC."
+                    f"Paziente salvato con successo! Codice Univoco: {codice_paziente}."
                 )
 
     # --------------------------------------------------------------------------
-    # FASE 2: RICHIAMA PAZIENTE / NUOVA VISITA DI CONTROLLO
+    # FASE 2: SECONDA VISITA / DMT II
     # --------------------------------------------------------------------------
-    elif modalita == "2. Richiama Paziente / Inserisci Nuova Visita":
-        st.subheader("🔍 Cerca Paziente in Archivio")
-        codice_search = st.text_input(
-            "Inserisci Codice Univoco Paziente (es. 2GET-A8B9C):"
-        )
+    elif modalita == "2. Seconda Visita / DMT: Referto Stadiatura & Decisione":
+        st.subheader("🔍 Cerca Paziente per Discussione DMT II")
+        codice_search = st.text_input("Inserisci Codice Univoco Paziente:")
 
         if codice_search in st.session_state["db_pazienti"]:
             paziente = st.session_state["db_pazienti"][codice_search]
             st.success(f"Paziente Trovato! ID: {codice_search}")
 
-            # MOSTRA STORICO
-            st.write("**📜 Storico Valutazioni e PSA Precedenti:**")
-            for idx, v in enumerate(paziente["visite"]):
-                st.caption(
-                    f"• **Visita {idx+1} ({v['data']}) - {v['tipo']}:** {v['dettagli']}"
+            st.write(
+                f"**Classe di Rischio Iniziale:** `{paziente.get('rischio')}`"
+            )
+
+            st.markdown("---")
+            st.subheader("📊 Inserimento Referto Stadiatura (PET PSMA / TC + Scintigrafia)")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                tipo_imaging = st.selectbox(
+                    "Esame di Stadiatura Eseguito:",
+                    [
+                        "PET/TC PSMA",
+                        "TC Torace-Addome + Scintigrafia Ossea",
+                        "mpRMN + Scintigrafia",
+                    ],
+                )
+                c_n = st.selectbox(
+                    "Stadio Linfonodale Clinico (cN):",
+                    [
+                        "cN0 (Assenza di adenopatie patologiche)",
+                        "cN1 (Linfonodi Pelvici Positivi)",
+                        "cNX",
+                    ],
+                )
+
+            with col2:
+                c_m = st.selectbox(
+                    "Stadio Metastatico Clinico (cM):",
+                    [
+                        "cM0 (Assenza di Metastasi a Distanza)",
+                        "cM1a (Linfonodi Extra-pelvici)",
+                        "cM1b (Metastasi Ossee)",
+                        "cM1c (Metastasi Viscerali)",
+                    ],
                 )
 
             st.markdown("---")
-            st.subheader("➕ Inserisci Nuova Visita di Controllo")
+            st.subheader("⚖️ Snodo Decisionale DMT Finale")
+
+            if c_m != "cM0 (Assenza di Metastasi a Distanza)":
+                st.error("🎯 **Indicazione Linee Guida:** Malattia Metastatica (cM1). Terapia Sistemica.")
+            elif c_n == "cN1 (Linfonodi Pelvici Positivi)":
+                st.warning("🎯 **Indicazione Linee Guida:** Malattia cN1. Radioterapia Pelvica + ADT o Chirurgia Multimodale.")
+            else:
+                st.success("🎯 **Indicazione Linee Guida:** Malattia Localizzata cM0. Chirurgia Radicale o Radioterapia ± ADT.")
+
+            scelta_trattamento = st.selectbox(
+                "Trattamento Concordato in DMT:",
+                [
+                    "Chirurgia (Post-Prostatectomia)",
+                    "Radioterapia",
+                    "Terapia Medica / Metastatico",
+                    "Sorveglianza Attiva",
+                ],
+            )
+
+            deviazione = (
+                c_m != "cM0 (Assenza di Metastasi a Distanza)"
+                and scelta_trattamento in ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)"]
+            )
+            motivazione_clinica = ""
+            if deviazione:
+                st.error("⚠️ Deviazione dalle Linee Guida rilevata.")
+                motivazione_clinica = st.text_area("Inserisci Motivazione Clinica (Obbligatoria):")
+
+            if st.button("💾 Conferma Decisione DMT"):
+                if deviazione and not motivazione_clinica.strip():
+                    st.error("Inserire motivazione per la deviazione.")
+                else:
+                    paziente["stadiato"] = True
+                    paziente["percorso_scelto"] = scelta_trattamento
+                    paziente["visite"].append({
+                        "data": str(datetime.today().date()),
+                        "tipo": "Visita II - Referto Stadiatura & Decisione DMT",
+                        "dettagli": f"Imaging: {tipo_imaging} | {c_n.split()[0]} {c_m.split()[0]} | Decisione DMT: {scelta_trattamento}"
+                        + (f" | Deviazione: {motivazione_clinica}" if motivazione_clinica else ""),
+                    })
+                    st.success("Decisione DMT salvata nello storico paziente!")
+        else:
+            st.warning("Codice paziente non trovato.")
+
+    # --------------------------------------------------------------------------
+    # FASE 3: CONTROLLO SUCCESSIVO / FOLLOW-UP PSA SPECIFICO
+    # --------------------------------------------------------------------------
+    elif modalita == "3. Controllo Successivo / Follow-up PSA":
+        st.subheader("🔍 Richiama Paziente per Follow-up")
+        codice_search = st.text_input("Inserisci Codice Univoco Paziente:")
+
+        if codice_search in st.session_state["db_pazienti"]:
+            paziente = st.session_state["db_pazienti"][codice_search]
+            st.success(f"Paziente Trovato! ID: {codice_search}")
+
             percorso_attuale = paziente["percorso_scelto"]
-            st.info(f"**Percorso Clinico Attuale:** {percorso_attuale}")
+            st.info(f"📌 **Percorso Terapeutico In Corso:** `{percorso_attuale}`")
 
-            # PRELIEVO PSA E SELEZIONE MESE/ANNO
-            st.markdown("🩸 **Nuova Valutazione PSA Sierico**")
+            # MOSTRA STORICO VISITE
+            with st.expander("📜 Visualizza Storico Controlli Precedenti", expanded=False):
+                for idx, v in enumerate(paziente["visite"]):
+                    st.caption(f"• **{v['data']} ({v['tipo']}):** {v['dettagli']}")
+
+            st.markdown("---")
+            st.subheader("🩸 Inserimento Nuova Valutazione PSA")
+
             col_psa1, col_psa2, col_psa3 = st.columns(3)
-
             with col_psa1:
                 mese_psa_a = st.selectbox(
-                    "Mese Prelievo PSA",
-                    ELENCO_MESI,
-                    index=datetime.today().month - 1,
+                    "Mese Prelievo PSA", ELENCO_MESI, index=datetime.today().month - 1
                 )
             with col_psa2:
                 anno_psa_a = st.number_input(
-                    "Anno Prelievo PSA",
-                    min_value=2000,
-                    max_value=2030,
-                    value=datetime.today().year,
+                    "Anno Prelievo PSA", min_value=2000, max_value=2030, value=datetime.today().year
                 )
             with col_psa3:
                 psa_attuale = st.number_input(
@@ -394,314 +538,124 @@ if organo_selezionato == "🧬 PROSTATA":
                     format="%.2f",
                 )
 
-            # Converti data in datetime.date (1° del mese)
             num_mese_a = ELENCO_MESI.index(mese_psa_a) + 1
             data_psa_attuale = datetime(anno_psa_a, num_mese_a, 1).date()
             str_data_psa = f"{mese_psa_a} {anno_psa_a}"
 
-            # CALCOLO PSADT AUTOMATICO
             psa_prec = paziente.get("ultimo_psa")
             data_prec = paziente.get("data_ultimo_psa")
 
-            psadt_calcolato = calcola_psadt(
-                psa_prec, data_prec, psa_attuale, data_psa_attuale
-            )
+            psadt_calcolato = calcola_psadt(psa_prec, data_prec, psa_attuale, data_psa_attuale)
 
             if psadt_calcolato is not None:
                 st.metric(
-                    label="📈 PSA Doubling Time (PSADT) Calcolato Automaticamente",
+                    label="📈 PSA Doubling Time (PSADT) Calcolato",
                     value=f"{psadt_calcolato} Mesi",
-                    delta=(
-                        "⚠️ Raddoppio Rapido (<10 mesi)"
-                        if psadt_calcolato < 10
-                        else "Stabile/Lento"
-                    ),
+                    delta="⚠️ Rapidità Raddoppio (<36m)" if psadt_calcolato < 36 else "Stabile/Lento",
                     delta_color="inverse",
                 )
             elif psa_prec is not None and psa_attuale <= psa_prec:
-                st.info(
-                    "ℹ️ **PSADT non applicabile**: Il valore di PSA è stabile o in calo rispetto al controllo precedente."
-                )
+                st.info("ℹ️ **PSADT Non Applicabile:** Valore PSA stabile o in riduzione rispetto al controllo precedente.")
 
             st.markdown("---")
 
             # ------------------------------------------------------------------
-            # FOLLOW-UP POST-CHIRURGIA
+            # FORM SPECIFICO A SECONDA DEL PERCORSO
             # ------------------------------------------------------------------
-            if percorso_attuale == "Chirurgia (Post-Prostatectomia)":
-                with st.form("form_chirurgia"):
-                    data_v = st.date_input(
-                        "Data Visita Odierna", datetime.today()
-                    )
-                    mesi_post_op = st.number_input(
-                        "Mesi trascorsi dall'Intervento Chirugico",
-                        min_value=1,
-                        value=6,
-                    )
+            if percorso_attuale == "Sorveglianza Attiva":
+                st.subheader("🛡️ Protocollo Follow-up: SORVEGLIANZA ATTIVA")
+                
+                col_sa1, col_sa2 = st.columns(2)
+                with col_sa1:
+                    mesi_in_sa = st.number_input("Mesi complessivi in Sorveglianza Attiva:", min_value=1, value=6)
+                with col_sa2:
+                    eseguita_rmn_recentemente = st.checkbox("Eseguita mpRMN nell'ultimo anno?")
 
-                    btn_salva = st.form_submit_button("💾 Salva Visita")
+                dati_eval = {
+                    "isup": paziente.get("isup", 1),
+                    "psadt": psadt_calcolato,
+                    "mesi_da_inizio_sa": mesi_in_sa
+                }
+                res_fu = calcola_timing_controllo("Sorveglianza Attiva", dati_eval)
 
-                    if btn_salva:
-                        mesi_prossimo, esami_rec = calcola_timing_controllo(
-                            percorso_attuale,
-                            {"psa": psa_attuale, "mesi_post_op": mesi_post_op},
-                        )
-                        data_prossima = data_v + timedelta(
-                            days=mesi_prossimo * 30
-                        )
+                if "⚠️" in res_fu["alert"]:
+                    st.error(res_fu["alert"])
+                else:
+                    st.success(res_fu["alert"])
 
-                        st.markdown("---")
-                        st.subheader("🗓️ Programmazione Prossimo Controllo")
-                        st.info(
-                            f"**Timing Consigliato:** Tra **{mesi_prossimo} mesi**"
-                        )
-                        st.success(
-                            f"**Data Prevista Controllo:** {data_prossima.strftime('%d/%m/%Y')}"
-                        )
-                        st.write(f"**Esami da Richiedere:** {esami_rec}")
+                st.markdown("### 🗓️ Pianificazione Prossimi Esami Consigliati:")
+                st.write(f"• **Ripetizione PSA Sierico:** {res_fu['rec_psa']}")
+                st.write(f"• **Risonanza Magnetica (mpRMN):** {res_fu['rec_rmn']}")
+                st.write(f"• **Biopsia Prostatica:** {res_fu['rec_bx']}")
 
-                        status = (
-                            "RECIDIVA BIOCHIMICA (PSA ≥ 0.20)"
-                            if psa_attuale >= 0.20
-                            else "Controllo Regolare"
-                        )
-                        psadt_str = (
-                            f" | PSADT: {psadt_calcolato} mesi"
-                            if psadt_calcolato
-                            else ""
-                        )
+            elif percorso_attuale == "Chirurgia (Post-Prostatectomia)":
+                st.subheader("🔪 Protocollo Follow-up: POST-PROSTATECTOMIA")
+                mesi_post_op = st.number_input("Mesi trascorsi dall'Intervento:", min_value=1, value=6)
 
-                        paziente["ultimo_psa"] = psa_attuale
-                        paziente["data_ultimo_psa"] = data_psa_attuale
-                        paziente["data_ultimo_psa_str"] = str_data_psa
-                        paziente["visite"].append({
-                            "data": str(data_v),
-                            "tipo": "Follow-up Post-Chirurgia",
-                            "dettagli": f"PSA: {psa_attuale:.2f} ({str_data_psa}){psadt_str} | Status: {status} | Prossimo Controllo: {data_prossima.strftime('%d/%m/%Y')}",
-                        })
+                res_fu = calcola_timing_controllo("Chirurgia (Post-Prostatectomia)", {"psa": psa_attuale, "mesi_post_op": mesi_post_op})
 
-            # ------------------------------------------------------------------
-            # FOLLOW-UP POST-RADIOTERAPIA
-            # ------------------------------------------------------------------
+                if "🚨" in res_fu["alert"]:
+                    st.error(res_fu["alert"])
+                else:
+                    st.success(res_fu["alert"])
+
+                st.markdown("### 🗓️ Pianificazione Prossimo Controllo:")
+                st.write(f"• **Raccomandazione PSA:** {res_fu['rec_psa']}")
+                st.write(f"• **Imaging Strategico:** {res_fu['rec_imaging']}")
+                st.write(f"• **Condotta Clinica:** {res_fu['rec_azione']}")
+
             elif percorso_attuale == "Radioterapia":
-                with st.form("form_rt"):
-                    data_v = st.date_input(
-                        "Data Visita Odierna", datetime.today()
-                    )
-                    mesi_post_rt = st.number_input(
-                        "Mesi trascorsi dal termine della RT",
-                        min_value=1,
-                        value=12,
-                    )
-                    psa_nadir = st.number_input(
-                        "PSA Nadir Raggiunto (ng/ml)", step=0.01, format="%.2f"
-                    )
+                st.subheader("⚛️ Protocollo Follow-up: POST-RADIOTERAPIA")
+                col_rt1, col_rt2 = st.columns(2)
+                with col_rt1:
+                    mesi_post_rt = st.number_input("Mesi trascorsi dalla RT:", min_value=1, value=12)
+                with col_rt2:
+                    psa_nadir = st.number_input("PSA Nadir Raggiunto (ng/ml):", min_value=0.0, value=0.10, step=0.01)
 
-                    btn_salva = st.form_submit_button("💾 Salva Visita")
+                res_fu = calcola_timing_controllo("Radioterapia", {"psa": psa_attuale, "psa_nadir": psa_nadir, "mesi_post_rt": mesi_post_rt})
 
-                    if btn_salva:
-                        mesi_prossimo, esami_rec = calcola_timing_controllo(
-                            percorso_attuale,
-                            {
-                                "psa": psa_attuale,
-                                "psa_nadir": psa_nadir,
-                                "mesi_post_rt": mesi_post_rt,
-                            },
-                        )
-                        data_prossima = data_v + timedelta(
-                            days=mesi_prossimo * 30
-                        )
+                if "🚨" in res_fu["alert"]:
+                    st.error(res_fu["alert"])
+                else:
+                    st.success(res_fu["alert"])
 
-                        st.markdown("---")
-                        st.subheader("🗓️ Programmazione Prossimo Controllo")
-                        st.info(
-                            f"**Timing Consigliato:** Tra **{mesi_prossimo} mesi**"
-                        )
-                        st.success(
-                            f"**Data Prevista Controllo:** {data_prossima.strftime('%d/%m/%Y')}"
-                        )
-                        st.write(f"**Esami da Richiedere:** {esami_rec}")
+                st.markdown("### 🗓️ Pianificazione Prossimo Controllo:")
+                st.write(f"• **Raccomandazione PSA:** {res_fu['rec_psa']}")
+                st.write(f"• **Imaging Strategico:** {res_fu['rec_imaging']}")
+                st.write(f"• **Condotta Clinica:** {res_fu['rec_azione']}")
 
-                        psadt_str = (
-                            f" | PSADT: {psadt_calcolato} mesi"
-                            if psadt_calcolato
-                            else ""
-                        )
+            else:
+                st.subheader("💊 Protocollo Follow-up: TERAPIA MEDICA / METASTATICO")
+                res_fu = calcola_timing_controllo("Terapia Medica / Metastatico", {})
+                st.write(f"• **Monitoraggio:** {res_fu['rec_psa']}")
 
-                        paziente["ultimo_psa"] = psa_attuale
-                        paziente["data_ultimo_psa"] = data_psa_attuale
-                        paziente["data_ultimo_psa_str"] = str_data_psa
-                        paziente["visite"].append({
-                            "data": str(data_v),
-                            "tipo": "Follow-up Post-RT",
-                            "dettagli": f"PSA: {psa_attuale:.2f} ({str_data_psa} - Nadir: {psa_nadir:.2f}){psadt_str} | Prossimo Controllo: {data_prossima.strftime('%d/%m/%Y')}",
-                        })
+            if st.button("💾 Salvataggio Visita di Controllo"):
+                paziente["ultimo_psa"] = psa_attuale
+                paziente["data_ultimo_psa"] = data_psa_attuale
+                paziente["data_ultimo_psa_str"] = str_data_psa
+                
+                psadt_str = f" | PSADT: {psadt_calcolato} mesi" if psadt_calcolato else ""
+                paziente["visite"].append({
+                    "data": str(datetime.today().date()),
+                    "tipo": f"Follow-up ({percorso_attuale})",
+                    "dettagli": f"PSA: {psa_attuale:.2f} ({str_data_psa}){psadt_str} | Indicazioni: {res_fu['rec_psa']}",
+                })
+                st.success("Controllo registrato con successo nello storico del paziente!")
 
-            # ------------------------------------------------------------------
-            # FOLLOW-UP TERAPIA MEDICA / METASTATICO (BRCA / HRR MODULO)
-            # ------------------------------------------------------------------
-            elif percorso_attuale in [
-                "Terapia Medica / Metastatico",
-                "Avanzato/Metastatico",
-            ]:
-                with st.form("form_onco"):
-                    data_v = st.date_input(
-                        "Data Visita Odierna", datetime.today()
-                    )
-
-                    st.markdown("🧬 **Assetto Genetico e Molecolare:**")
-                    test_brca = st.selectbox(
-                        "Stato Mutazionale BRCA1/2 - HRR:",
-                        [
-                            "Non Eseguito",
-                            "BRCA1/2 Mutato (Germinale/Somatico)",
-                            "HRR Mutato (non BRCA)",
-                            "Wild Type (Negativo)",
-                        ],
-                    )
-
-                    st.markdown("💊 **Stato Clinico e Linea Terapeutica:**")
-                    crpc = st.checkbox(
-                        "Stato Castration-Resistant (mCRPC / nmCRPC)"
-                    )
-                    progressione = st.checkbox(
-                        "Innalzamento PSA consecutivo / Progresione Strumentale"
-                    )
-
-                    btn_salva = st.form_submit_button(
-                        "💾 Salva Valutazione Oncologica"
-                    )
-
-                    if btn_salva:
-                        mesi_prossimo, esami_rec = calcola_timing_controllo(
-                            percorso_attuale,
-                            {"crpc": crpc, "progressione": progressione},
-                        )
-                        data_prossima = data_v + timedelta(
-                            days=mesi_prossimo * 30
-                        )
-
-                        st.markdown("---")
-                        st.subheader(
-                            "🗓️ Programmazione Prossimo Controllo Oncologico"
-                        )
-                        st.info(
-                            f"**Timing Consigliato:** Tra **{mesi_prossimo} mesi**"
-                        )
-                        st.success(
-                            f"**Data Prevista Controllo:** {data_prossima.strftime('%d/%m/%Y')}"
-                        )
-                        st.write(f"**Esami Obbligatori:** {esami_rec}")
-
-                        if "BRCA" in test_brca:
-                            st.warning(
-                                "💡 **Indicazione Terapeutica:** Presenza di mutazione BRCA. Valutare idoneità a PARP-Inibitori (es. Olaparib) in combinazione o monoterapia."
-                            )
-
-                        psadt_str = (
-                            f" | PSADT: {psadt_calcolato} mesi"
-                            if psadt_calcolato
-                            else ""
-                        )
-
-                        paziente["ultimo_psa"] = psa_attuale
-                        paziente["data_ultimo_psa"] = data_psa_attuale
-                        paziente["data_ultimo_psa_str"] = str_data_psa
-                        paziente["visite"].append({
-                            "data": str(data_v),
-                            "tipo": "Oncologia Avanzata/Metastatica",
-                            "dettagli": f"PSA: {psa_attuale:.2f} ({str_data_psa}){psadt_str} | BRCA: {test_brca} | CRPC: {crpc} | Prossima Visita: {data_prossima.strftime('%d/%m/%Y')}",
-                        })
         else:
-            st.warning(
-                "Codice non trovato. Verifica il codice univoco sul tuo file 'Registro_Chiave_Pazienti.csv' locale."
-            )
+            st.warning("Codice paziente non trovato.")
 
 # ==============================================================================
-# MODULO 2: RENE (RCC)
+# MODULI RENE, VESCICA, TESTICOLO
 # ==============================================================================
 elif organo_selezionato == "🫘 RENE (RCC)":
-    st.title("🫘 Carcinoma Renale (RCC) - Decision Support System")
-    st.info("Modulo Stadiatura TNM, Score IMDC (Heng) per M-RCC e SSIGN Score.")
+    st.title("🫘 Carcinoma Renale (RCC)")
+    st.info("Modulo Stadiatura TNM & IMDC Risk Score.")
 
-    st.subheader("Calcolatore IMDC Risk Score (per M-RCC Metastatico)")
-    c1, c2 = st.columns(2)
-    with c1:
-        ecog = st.checkbox("Karnofsky Performance Status < 80% (o ECOG ≥ 2)")
-        time_dx = st.checkbox(
-            "Tempo da Diagnosi a Trattamento Sistemico < 1 Anno"
-        )
-        hb = st.checkbox("Emoglobina < Limite Inferiore della Norma (LNN)")
-    with c2:
-        ca = st.checkbox(
-            "Calcio Sierico Corretto > 10.0 mg/dL (Ipercalcemia)"
-        )
-        anc = st.checkbox("Neutrofili Assoluti (ANC) > ULN")
-        plt = st.checkbox("Piastrine > ULN (Piastritosi)")
-
-    score_imdc = sum([ecog, time_dx, hb, ca, anc, plt])
-
-    if score_imdc == 0:
-        st.success("🟢 **Rischio IMDC: FAVOREVOLE (0 Fattori)**")
-        st.write(
-            "**Indicazione Terapeutica:** Doppietta Immuno-TKI o Immuno-Immuno secondo linee guida EAU."
-        )
-    elif score_imdc in [1, 2]:
-        st.warning("🟡 **Rischio IMDC: INTERMEDIO (1-2 Fattori)**")
-        st.write(
-            "**Indicazione Terapeutica:** Immuno-Immuno (Nivolumab+Ipilimumab) o Immuno-TKI."
-        )
-    else:
-        st.error("🔴 **Rischio IMDC: SFAVOREVOLE / POOR (≥ 3 Fattori)**")
-        st.write(
-            "**Indicazione Terapeutica:** Immuno-Immuno (Nivolumab+Ipilimumab) o Immuno-TKI."
-        )
-
-# ==============================================================================
-# MODULO 3: VESCICA & UTUC
-# ==============================================================================
 elif organo_selezionato == "🫁 VESCICA & UTUC":
     st.title("🫁 Carcinoma Uroteliale Vescicale & UTUC")
-    st.info("Modulo Stratificazione EAU NMIBC & Criteri Elegibilità Cisplatino.")
+    st.info("Stratificazione NMIBC e Elegibilità Cisplatino (Galsky).")
 
-    st.subheader("Criteri di Elegibilità al Cisplatino (Galsky Criteria)")
-    g1, g2 = st.columns(2)
-    with g1:
-        ecog_g = st.radio("ECOG Performance Status:", [0, 1, 2, 3])
-        egfr = st.number_input("eGFR / Clearance Creatinina (ml/min)", value=65)
-    with g2:
-        neuropatia = st.checkbox("Neuropatia Periferica ≥ Grado 2")
-        ototossicita = st.checkbox("Ipoacusia / Ototossicità ≥ Grado 2")
-        sfoc = st.checkbox("Scompenso Cardiaco NYHA ≥ Class III")
-
-    unfit = (
-        (ecog_g >= 2)
-        or (egfr < 60)
-        or neuropatia
-        or ototossicita
-        or sfoc
-    )
-
-    if unfit:
-        st.error("🚫 **PAZIENTE UNFIT AL CISPLATINO**")
-        st.write(
-            "**Strategia Alternativa:** Schemi a base di Carboplatino, Immunoterapia (Pembrolizumab) o Atezolizumab."
-        )
-    else:
-        st.success("✅ **PAZIENTE FIT AL CISPLATINO**")
-        st.write(
-            "**Strategia Standard:** Chemioterapia Neoadiuvante con Gemcitabina + Cisplatino (GC) o ddMVAC."
-        )
-
-# ==============================================================================
-# MODULO 4: TESTICOLO & PENE
-# ==============================================================================
 elif organo_selezionato == "🥚 TESTICOLO & PENE":
     st.title("🥚 Tumori del Testicolo & del Pene")
-    st.info("Classificazione Prognostica IGCCCG e Marcatori Sierici (S-Category).")
-
-    afp = st.number_input("Alfa-Fetoproteina (AFP) ng/ml", value=5.0)
-    hcg = st.number_input("Beta-hCG mIU/ml", value=2.0)
-    ldh = st.number_input("LDH (x ULN)", value=1.0)
-
-    st.caption("Stratificazione del rischio secondo criteri IGCCCG per neoplasie germinali.")
+    st.info("Classificazione IGCCCG e Marcatori Sierici.")
