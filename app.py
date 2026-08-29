@@ -35,7 +35,7 @@ with col_a2:
     eta = (
         data_visita.year
         - data_nascita.year
-        - ((data_visita.month, data_visita.day) < (data_nascita.month, data_nascita.day))
+        - ((data_visita.month, data_visita.day) < (data_visita.month, data_visita.day))
     )
     st.info(f"📅 **Età calcolata:** {eta} anni")
 
@@ -134,40 +134,38 @@ if st.button("🚀 Genera Referto e Analisi Stadiativa"):
         elif ece_rmn and dre_stage not in ["cT3b"]:
             c_stage_final = "cT3a"
 
-        # OVERRIDING E STRATIFICAZIONE RISCHIO
+        # ALGORITMO DI STRATIFICAZIONE DEL RISCHIO (EAU/NCCN) - CORRETTO
         risk_override_reason = []
-        
-        # Valutazione base da ISUP / PSA / cT
-        if isup_val == 1 and psa < 10 and c_stage_final in ["cT1c", "cT2a"]:
-            classe_rischio = "BASSO RISCHIO"
-        elif isup_val == 2 and perc_carote < 50 and psa <= 20 and c_stage_final in ["cT1c", "cT2a", "cT2b"]:
+
+        # 1. ALTO RISCHIO / LOCALMENTE AVANZATO
+        if c_stage_final in ["cT3a", "cT3b", "cT4"] or psa > 20 or isup_val >= 4:
+            classe_rischio = "ALTO RISCHIO / LOCALMENTE AVANZATO"
+            if c_stage_final in ["cT3a", "cT3b"] and isup_val <= 2:
+                risk_override_reason.append(f"Upgrade ad Alto Rischio per evidenza RMN/DRE di estensione extraprostatica ({c_stage_final}).")
+
+        # 2. INTERMEDIO SFAVOREVOLE
+        elif isup_val == 3 or (isup_val == 2 and (perc_carote >= 50 or psa > 10)):
+            classe_rischio = "INTERMEDIO SFAVOREVOLE"
+            if has_tertiary and tertiary_pattern == "Pattern 5":
+                risk_override_reason.append("Caratteristiche di aggressività aumentata per Pattern 5 Terziario.")
+
+        # 3. INTERMEDIO FAVOREVOLE (Inclusi ISUP 1 con cT2b/cT2c o PSA 10-20, ed ISUP 2 con basso carico)
+        elif (isup_val == 2 and perc_carote < 50 and psa <= 10) or (isup_val == 1 and (c_stage_final in ["cT2b", "cT2c"] or psa > 10)):
             classe_rischio = "INTERMEDIO FAVOREVOLE"
-        elif isup_val in [2, 3] and (perc_carote >= 50 or isup_val == 3 or psa > 10) and c_stage_final in ["cT1c", "cT2a", "cT2b"]:
-            classe_rischio = "INTERMEDIO SFAVOREVOLE"
+
+        # 4. BASSO RISCHIO (ISUP 1, PSA < 10, cT1c-cT2a)
         else:
-            classe_rischio = "ALTO RISCHIO / LOCALMENTE AVANZATO"
-
-        # Controllo Overriding da RMN o Terziario
-        if c_stage_final in ["cT3a", "cT3b"] and classe_rischio != "ALTO RISCHIO / LOCALMENTE AVANZATO":
-            classe_rischio = "ALTO RISCHIO / LOCALMENTE AVANZATO"
-            risk_override_reason.append(f"Upgrade ad Alto Rischio per evidenza RMN/DRE di stadio {c_stage_final} (ECE/SVI).")
-
-        if has_tertiary and tertiary_pattern == "Pattern 5" and classe_rischio in ["BASSO RISCHIO", "INTERMEDIO FAVOREVOLE"]:
-            classe_rischio = "INTERMEDIO SFAVOREVOLE"
-            risk_override_reason.append("Upgrade di classe per presenza di Pattern 5 Terziario alla biopsia.")
+            classe_rischio = "BASSO RISCHIO"
 
         # ALGORITMO NOMOGRAMMA MSKCC / SLOAN KETTERING (Linfonodi e Mortalità)
-        # Stima nomogramma MSKCC Pre-Operatorio per Rischio Linfonodale (LNI)
         logit_lni = -4.5 + (0.05 * psa) + (0.8 * (isup_val - 1)) + (0.9 if "cT3" in c_stage_final else 0.3 if "cT2" in c_stage_final else 0)
         risk_lni = (1 / (1 + math.exp(-logit_lni))) * 100
-        risk_lni = max(1.0, min(risk_lni, 85.0)) # Bounding ragionevole
+        risk_lni = max(1.0, min(risk_lni, 85.0))
 
-        # Stima Mortalità Cancro-Specifica a 15 anni senza trattamento locale
         logit_csm = -3.8 + (0.03 * psa) + (0.6 * (isup_val - 1)) + (0.04 * (eta - 60))
         risk_csm_15yr = (1 / (1 + math.exp(-logit_csm))) * 100
         risk_csm_15yr = max(0.5, min(risk_csm_15yr, 70.0))
 
-        # INDICAZIONI LINFOADENECTOMIA (EAU Guidelines: Soglia MSKCC/Briganti > 5%)
         indicazione_plnd = "INDICATA (Rischio LNI > 5%)" if risk_lni >= 5.0 else "NON NECESSARIA (Rischio LNI < 5%)"
 
         # TESTO PARERE MULTIDISCIPLINARE / DMT
@@ -178,9 +176,14 @@ if st.button("🚀 Genera Referto e Analisi Stadiativa"):
 In conformità alle Linee Guida EAU/NCCN, si raccomanda prioritariamente l'inserimento in un programma di Sorveglianza Attiva (SA) secondo protocollo codificato. Come opzioni alternative a finalità radicale si prospettano la Prostatectomia Radicale o la Radioterapia."""
 
         elif classe_rischio == "INTERMEDIO FAVOREVOLE":
-            parere_dmt = """Caso clinico discusso in sede Multidisciplinare (DMT). I parametri clinico-bioptici (ISUP 2 con carico bioptico < 50%, PSA <= 20 ng/ml) configurano una classe di RISCHIO INTERMEDIO FAVOREVOLE.
+            if isup_val == 1:
+                parere_dmt = """Caso clinico discusso in sede Multidisciplinare (DMT). La presenza di un quadro istopatologico ISUP 1 (Gleason Score 3+3=6) associato a stadio clinicamente confinato (cT2b/cT2c) o PSA lievemente incrementato configura una classe di RISCHIO INTERMEDIO FAVOREVOLE.
 
-In accordo con le Linee Guida, si pone indicazione a trattamento radicale primario mediante Prostatectomia Radicale o Radioterapia. In casi selezionati e previo adeguato counseling, può essere discussa l'opzione della Sorveglianza Attiva con monitoraggio stringente."""
+In accordo con le Linee Guida internazionali (EAU/NCCN), la **Sorveglianza Attiva (SA)** con monitoraggio stringente rimane l'opzione di gestione prioritaria e raccomandata, al fine di evitare il sovratrattamento. Nell'ambito della decisione condivisa con il paziente, vengono altresì illustrate le opzioni a finalità curativa (Prostatectomia Radicale o Radioterapia radicale)."""
+            else:
+                parere_dmt = """Caso clinico discusso in sede Multidisciplinare (DMT). I parametri clinico-bioptici (ISUP 2 con carico bioptico < 50%, PSA <= 10 ng/ml) configurano una classe di RISCHIO INTERMEDIO FAVOREVOLE.
+
+In accordo con le Linee Guida, si pone indicazione a trattamento radicale primario mediante Prostatectomia Radicale o Radioterapia. In casi selezionati e previo adeguato counseling, può essere presa in considerazione l'opzione della Sorveglianza Attiva con monitoraggio stringente."""
 
         elif classe_rischio == "INTERMEDIO SFAVOREVOLE":
             parere_dmt = """Caso clinico discusso in sede Multidisciplinare (DMT). Il quadro anatomopatologico e clinico configura una classe di RISCHIO INTERMEDIO SFAVOREVOLE.
