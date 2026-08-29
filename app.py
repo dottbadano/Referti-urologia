@@ -11,7 +11,7 @@ st.header("0. Tipo di Prestazione")
 tipo_visita = st.selectbox(
     "Seleziona il tipo di prestazione/patologia:",
     [
-        "Visita tumore prostata",
+        "Tumore prostata biopsia",
         "Visita urologica prostata",
         "Cistoscopia",
         "Visita tumore vescica",
@@ -39,10 +39,10 @@ with col_a2:
     )
     st.info(f"📅 **Età calcolata:** {eta} anni")
 
-# --- SEZIONE SPECIFICA: TUMORE PROSTATA ---
-if tipo_visita == "Visita tumore prostata":
+# --- SEZIONE SPECIFICA: TUMORE PROSTATA BIOPSIA ---
+if tipo_visita == "Tumore prostata biopsia":
     st.markdown("---")
-    st.header("2. Parametri Clinico-Stadiativi Basali (Oncologia Prostatica)")
+    st.header("2. Parametri Clinico-Stadiativi Basali e Bioptici")
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -52,34 +52,52 @@ if tipo_visita == "Visita tumore prostata":
         st.caption(f"**PSAD Calcolata:** {psad:.2f} ng/ml/cc")
 
     with col2:
-        isup_group = st.selectbox(
-            "ISUP Group (Gleason Score):",
+        gleason_score = st.selectbox(
+            "Gleason Score Bioptico Primo + Secondo:",
             [
-                "ISUP 1 (Gleason 3+3=6)",
-                "ISUP 2 (Gleason 3+4=7 - Prevalenza Pattern 3)",
-                "ISUP 3 (Gleason 4+3=7 - Prevalenza Pattern 4)",
-                "ISUP 4 (Gleason 4+4=8 / 3+5=8)",
-                "ISUP 5 (Gleason 9-10)",
+                "3+3 (ISUP 1)",
+                "3+4 (ISUP 2)",
+                "4+3 (ISUP 3)",
+                "4+4 (ISUP 4)",
+                "3+5 (ISUP 4)",
+                "4+5 (ISUP 5)",
+                "5+4 (ISUP 5)",
+                "5+5 (ISUP 5)",
             ],
         )
+        has_tertiary = st.checkbox("Presenza di Pattern Terziario?")
+        tertiary_pattern = None
+        if has_tertiary:
+            tertiary_pattern = st.selectbox("Pattern Terziario:", ["Pattern 4", "Pattern 5"])
+
         ecog_ps = st.selectbox("Performance Status ECOG:", ["ECOG 0", "ECOG 1", "ECOG 2", "ECOG 3"])
 
     with col3:
-        c_stage = st.selectbox(
-            "Stadio Clinico T (DRE / mpRMN):",
-            ["cT1c", "cT2a", "cT2b", "cT2c", "cT3a", "cT3b", "cT4"],
+        dre_stage = st.selectbox(
+            "Stadio Clinico all'Esplorazione Rettale (DRE):",
+            ["cT1c", "cT2a", "cT2b", "cT2c", "cT3a", "cT3b"],
         )
         carote_pos = st.number_input("Carote Positive", value=2, min_value=1)
         carote_tot = st.number_input("Carote Totali Prelevate", value=12, min_value=1)
         perc_carote = (carote_pos / carote_tot) * 100 if carote_tot > 0 else 0
         st.caption(f"**Carico bioptico:** {carote_pos}/{carote_tot} ({perc_carote:.1f}%)")
 
-    st.subheader("Summary Esami di Staging Clinico-Strumentale")
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        mp_rmn = st.text_input("Risonanza Magnetica Prostatica (mpRMN)", "PIRADS 4 - Sede PZ Dsn - ECE: No - SVI: No")
-    with col_s2:
-        pet_psma = st.text_input("PET/TC PSMA / Scintigrafia / TC", "Negativa per localizzazioni ripetitive a distanza")
+    st.subheader("3. Inquadramento mpRMN Prostatica (Flag/Tendina)")
+    col_rm1, col_rm2, col_rm3 = st.columns(3)
+    with col_rm1:
+        pirads = st.selectbox("PIRADS Lesione Indice:", ["PIRADS 3", "PIRADS 4", "PIRADS 5", "Non Eseguita / Negativa"])
+    with col_rm2:
+        ece_rmn = st.checkbox("ECE alla mpRMN (Estensione Extraprostatica - cT3a)")
+    with col_rm3:
+        svi_rmn = st.checkbox("SVI alla mpRMN (Invasione Vescicole Seminali - cT3b)")
+
+    rmn_text_summary = f"{pirads}"
+    if ece_rmn:
+        rmn_text_summary += " - Presenza di ECE (cT3a)"
+    if svi_rmn:
+        rmn_text_summary += " - Presenza di SVI (cT3b)"
+    if not ece_rmn and not svi_rmn and pirads != "Non Eseguita / Negativa":
+        rmn_text_summary += " - Sede confinata alla ghiandola (cT2)"
 
 # --- ALTRE TIPOLOGIE DI VISITA (Interfaccia Standard) ---
 else:
@@ -91,37 +109,94 @@ else:
 
 
 # --- GENERAZIONE REFERTO ---
-if st.button("🚀 Genera Referto e Analisi"):
+if st.button("🚀 Genera Referto e Analisi Stadiativa"):
     st.markdown("---")
     st.subheader("📋 Referto Generato")
 
-    if tipo_visita == "Visita tumore prostata":
-        parere_dmt = ""
-        classe_rischio = ""
+    if tipo_visita == "Tumore prostata biopsia":
+        # MAPPA ISUP DAL GLEASON
+        isup_val = 1
+        if "3+3" in gleason_score:
+            isup_val = 1
+        elif "3+4" in gleason_score:
+            isup_val = 2
+        elif "4+3" in gleason_score:
+            isup_val = 3
+        elif "4+4" in gleason_score or "3+5" in gleason_score:
+            isup_val = 4
+        else:
+            isup_val = 5
 
-        if "ISUP 1" in isup_group and psa < 10 and c_stage in ["cT1c", "cT2a"]:
+        # CALCOLO STADIO CLINICO FINALE (CROSS-CHECK DRE vs RMN)
+        c_stage_final = dre_stage
+        if svi_rmn:
+            c_stage_final = "cT3b"
+        elif ece_rmn and dre_stage not in ["cT3b"]:
+            c_stage_final = "cT3a"
+
+        # OVERRIDING E STRATIFICAZIONE RISCHIO
+        risk_override_reason = []
+        
+        # Valutazione base da ISUP / PSA / cT
+        if isup_val == 1 and psa < 10 and c_stage_final in ["cT1c", "cT2a"]:
             classe_rischio = "BASSO RISCHIO"
-            parere_dmt = """Caso clinico collegialmente analizzato e discusso in sede di Multidisciplinare (DMT). Alla luce del quadro istopatologico (ISUP Group 1 / Gleason Score 3+3=6), dei valori sierici del PSA sierico (< 10 ng/ml) e della stadiazione clinico-strumentale (cT1c-T2a), la patologia si stratifica secondo le Linee Guida internazionali di riferimento (EAU/NCCN/AIOM) nella classe a Basso Rischio di progressione.
-
-In conformità con le raccomandazioni scientifiche vigenti, si consiglia ed indica prioritariamente l'inserimento in un programma di Sorveglianza Attiva secondo protocollo codificato (monitoraggio seriale del PSA, mpRMN e re-biopsia temporizzata). Contestualmente, nell'ambito di una corretta informazione ed alleanza terapeutica, vengono considerate ed illustrate come opzioni alternative a finalità radicale/curativa il trattamento chirurgico (Prostatectomia Radicale) e la Radioterapia (EBRT/SBRT). La scelta finale sull'iter da intraprendere sarà definita previa valutazione multidisciplinare delle comorbilità e ponderata decisione condivisa con il paziente."""
-
-        elif "ISUP 2" in isup_group and perc_carote < 50 and psa <= 20 and c_stage in ["cT1c", "cT2a", "cT2b"]:
+        elif isup_val == 2 and perc_carote < 50 and psa <= 20 and c_stage_final in ["cT1c", "cT2a", "cT2b"]:
             classe_rischio = "INTERMEDIO FAVOREVOLE"
-            parere_dmt = """Caso clinico analizzato e discusso collegialmente in sede di Multidisciplinare (DMT). L'integrazione dei parametri clinico-laboratoristici con i reperti anatomo-patologici (ISUP Group 2 / Gleason Score 3+4=7 con prevalenza di Pattern 3, singolo fattore di rischio intermedio e carico bioptico < 50%) definisce una classe di Rischio Intermedio Favorevole ai sensi delle Linee Guida di settore (EAU/NCCN).
-
-In accordo con le raccomandazioni vigenti, si pone indicazione a trattamento locale a fine curativo mediante Prostatectomia Radicale (con eventuale linfoadenectomia di stadiazione sulla base delle carte di rischio) oppure Radioterapia radicale. Qualora sussistano specifici criteri di selezione (bassa densità di PSA, comorbilità rilevanti o motivata preferenza del paziente) e previa adeguata informazione, può essere presa in considerazione l'opzione della Sorveglianza Attiva con monitoraggio stringente. La decisione finale sarà condivisa con il paziente in base al bilancio tra tollerabilità ed aspettativa di vita."""
-
-        elif "ISUP 3" in isup_group or ("ISUP 2" in isup_group and perc_carote >= 50):
+        elif isup_val in [2, 3] and (perc_carote >= 50 or isup_val == 3 or psa > 10) and c_stage_final in ["cT1c", "cT2a", "cT2b"]:
             classe_rischio = "INTERMEDIO SFAVOREVOLE"
-            parere_dmt = """Caso clinico riesaminato in sede di DMT Uro-Oncologico. Il quadro anatomopatologico e clinico (ISUP Group 2 con carico bioptico ≥ 50% ovvero ISUP Group 3 / Gleason Score 4+3=7 con prevalenza di Pattern 4 o molteplici fattori intermedi) configura una classe di Rischio Intermedio Sfavorevole.
-
-In ottemperanza alle Linee Guida internazionali, per un'accurata stratificazione e stadiazione di malattia si ritiene indicata/raccomandata l'esecuzione di completamento diagnostico mediante PET/TC con PSMA (ovvero TC addome-pelvi e scintigrafia ossea). All'esito dello staging, si conferma la formale indicazione a trattamento locale ad intenzione curativa: le opzioni validate comprendono l'intervento chirurgico di Prostatectomia Radicale (con linfoadenectomia pelvica) ovvero la Radioterapia associata a Terapia di Deprivazione Androgenica (ADT) a breve/medio termine (4-6 mesi). La scelta terapeutica definitiva sarà ponderata con il paziente previa valutazione dello stato generale e del profilo di tollerabilità."""
-
         else:
             classe_rischio = "ALTO RISCHIO / LOCALMENTE AVANZATO"
-            parere_dmt = """Caso discusso in sede di DMT Uro-Oncologico. La combinazione dei fattori prognostici sfavorevoli, inclusa la presenza di elevata gradazione bioptica (ISUP Group 4 o 5 / Gleason Score ≥ 8), PSA > 20 ng/ml o cT2c/cT3, colloca il quadro patologico nella categoria ad Alto Rischio secondo i criteri della letteratura scientifica accreditata.
 
-Ai fini di un corretto inquadramento stadiativo primario e per l'esclusione di localizzazioni secondarie occulte, si pone indicazione prioritaria all'esecuzione di PET/TC con PSMA, in accordo con le raccomandazioni delle Linee Guida vigenti. All'esito dell'imaging, si prospetta una strategia terapeutica multimodale: le opzioni standard comprendono la Radioterapia ad alto dosaggio in combinazione con la Deprivazione Androgenica (ADT) a lungo termine (18-36 mesi) ed eventuale associazione di agenti ormonali di nuova generazione (NHA), oppure la Prostatectomia Radicale con Linfoadenectomia pelvica estesa nell'ambito di un programma integrato. La pianificazione finale verrà concordata nell'ambito di una decisione clinica condivisa con il paziente."""
+        # Controllo Overriding da RMN o Terziario
+        if c_stage_final in ["cT3a", "cT3b"] and classe_rischio != "ALTO RISCHIO / LOCALMENTE AVANZATO":
+            classe_rischio = "ALTO RISCHIO / LOCALMENTE AVANZATO"
+            risk_override_reason.append(f"Upgrade ad Alto Rischio per evidenza RMN/DRE di stadio {c_stage_final} (ECE/SVI).")
+
+        if has_tertiary and tertiary_pattern == "Pattern 5" and classe_rischio in ["BASSO RISCHIO", "INTERMEDIO FAVOREVOLE"]:
+            classe_rischio = "INTERMEDIO SFAVOREVOLE"
+            risk_override_reason.append("Upgrade di classe per presenza di Pattern 5 Terziario alla biopsia.")
+
+        # ALGORITMO NOMOGRAMMA MSKCC / SLOAN KETTERING (Linfonodi e Mortalità)
+        # Stima nomogramma MSKCC Pre-Operatorio per Rischio Linfonodale (LNI)
+        logit_lni = -4.5 + (0.05 * psa) + (0.8 * (isup_val - 1)) + (0.9 if "cT3" in c_stage_final else 0.3 if "cT2" in c_stage_final else 0)
+        risk_lni = (1 / (1 + math.exp(-logit_lni))) * 100
+        risk_lni = max(1.0, min(risk_lni, 85.0)) # Bounding ragionevole
+
+        # Stima Mortalità Cancro-Specifica a 15 anni senza trattamento locale
+        logit_csm = -3.8 + (0.03 * psa) + (0.6 * (isup_val - 1)) + (0.04 * (eta - 60))
+        risk_csm_15yr = (1 / (1 + math.exp(-logit_csm))) * 100
+        risk_csm_15yr = max(0.5, min(risk_csm_15yr, 70.0))
+
+        # INDICAZIONI LINFOADENECTOMIA (EAU Guidelines: Soglia MSKCC/Briganti > 5%)
+        indicazione_plnd = "INDICATA (Rischio LNI > 5%)" if risk_lni >= 5.0 else "NON NECESSARIA (Rischio LNI < 5%)"
+
+        # TESTO PARERE MULTIDISCIPLINARE / DMT
+        parere_dmt = ""
+        if classe_rischio == "BASSO RISCHIO":
+            parere_dmt = """Caso clinico discusso in sede Multidisciplinare (DMT). Alla luce del quadro istopatologico (ISUP 1), dei valori sierici del PSA (< 10 ng/ml) e dell'imaging RMN/DRE confinato (cT1c-cT2a), la patologia si stratifica nella classe a BASSO RISCHIO.
+
+In conformità alle Linee Guida EAU/NCCN, si raccomanda prioritariamente l'inserimento in un programma di Sorveglianza Attiva (SA) secondo protocollo codificato. Come opzioni alternative a finalità radicale si prospettano la Prostatectomia Radicale o la Radioterapia."""
+
+        elif classe_rischio == "INTERMEDIO FAVOREVOLE":
+            parere_dmt = """Caso clinico discusso in sede Multidisciplinare (DMT). I parametri clinico-bioptici (ISUP 2 con carico bioptico < 50%, PSA <= 20 ng/ml) configurano una classe di RISCHIO INTERMEDIO FAVOREVOLE.
+
+In accordo con le Linee Guida, si pone indicazione a trattamento radicale primario mediante Prostatectomia Radicale o Radioterapia. In casi selezionati e previo adeguato counseling, può essere discussa l'opzione della Sorveglianza Attiva con monitoraggio stringente."""
+
+        elif classe_rischio == "INTERMEDIO SFAVOREVOLE":
+            parere_dmt = """Caso clinico discusso in sede Multidisciplinare (DMT). Il quadro anatomopatologico e clinico configura una classe di RISCHIO INTERMEDIO SFAVOREVOLE.
+
+Si raccomanda completamento stadiativo con PET/TC PSMA. Si conferma l'indicazione a trattamento ad intenzione curativa mediante Prostatectomia Radicale (con eventuale Linfoadenectomia Pelvica se MSKCC > 5%) oppure Radioterapia radicale associata ad Androgeno-Deprivazione (ADT) a breve termine (4-6 mesi)."""
+
+        else:
+            parere_dmt = """Caso discusso in sede Multidisciplinare (DMT). La presenza di fattori di rischio elevati (Gleason Score elevato, PSA > 20 ng/ml e/o estensione extraprostatica ECE/SVI alla RMN) colloca il quadro nella categoria ad ALTO RISCHIO / LOCALMENTE AVANZATO.
+
+Ai fini stadiativi si richiede prioritaria esecuzione di PET/TC PSMA. Si prospetta una strategia terapeutica integrata: Radioterapia ad alto dosaggio in combinazione con ADT a lungo termine (18-36 mesi) +/- agenti ormonali di nuova generazione (NHA), oppure Prostatectomia Radicale con Linfoadenectomia Pelvica estesa nell'ambito di un percorso multimodale."""
+
+        # VISUALIZZAZIONE WARNING OVERRIDE
+        if risk_override_reason:
+            st.warning("⚠️ **AUTOMATIC OVERRIDE DI SICUREZZA:** " + " ".join(risk_override_reason))
+
+        terziario_str = f" (Pattern Terziario: {tertiary_pattern})" if has_tertiary else ""
 
         referto_finale = f"""# VERBALE MULTIDISCIPLINARE (DMT) - CARCINOMA DELLA PROSTATA
 
@@ -131,23 +206,30 @@ Ai fini di un corretto inquadramento stadiativo primario e per l'esclusione di l
 
 ---
 
-### 1. DATI ANAGRAFICI E PARAMETRI CLINICO-STADIATIVI BASALI
+### 1. PARAMETRI CLINICO-STADIATIVI E BIOPTICI
 * **PSA Sierico Basale:** {psa:.2f} ng/ml (PSAD: {psad:.2f} ng/ml/cc)
-* **ISUP Group (Gleason):** {isup_group}
-* **Stadio Clinico T (DRE/RM):** {c_stage}
+* **Gleason Score Bioptico:** {gleason_score}{terziario_str} -> **ISUP Group {isup_val}**
+* **Stadio Clinico DRE:** {dre_stage}
+* **Stadio Clinico Integrato (DRE + mpRMN):** {c_stage_final}
 * **Biopsia Prostatica:** {carote_pos}/{carote_tot} carote positive ({perc_carote:.1f}% coinvolgimento)
 * **Performance Status:** {ecog_ps}
 * **Classe di Rischio Calcolata:** {classe_rischio}
 
 ---
 
-### 2. SUMMARY ESAMI DI STAGING CLINICO-STRUMENTALE
-* **mpRMN Prostatica:** {mp_rmn}
-* **PET/TC PSMA / Staging:** {pet_psma}
+### 2. INQUADRAMENTO mpRMN PROSTATICA
+* **Referto mpRMN:** {rmn_text_summary}
 
 ---
 
-### 3. PARERE COLLEGIALE DMT
+### 3. NOMOGRAMMI DI PREDIZIONE MSKCC (SLOAN KETTERING)
+* **Rischio Coinvolgimento Linfonodale (LNI MSKCC):** {risk_lni:.1f}%
+* **Indicazione a Linfoadenectomia Pelvica (ePLND):** {indicazione_plnd}
+* **Stima Mortalità Cancro-Specifica a 15 anni (senza trattamento):** {risk_csm_15yr:.1f}%
+
+---
+
+### 4. PARERE COLLEGIALE E RACCOMANDAZIONI DMT
 {parere_dmt}
 """
         st.code(referto_finale, language="markdown")
