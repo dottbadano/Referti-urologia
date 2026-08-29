@@ -84,7 +84,7 @@ if tipo_visita == "Visita tumore prostata":
 # --- ALTRE TIPOLOGIE DI VISITA (Interfaccia Standard) ---
 else:
     st.markdown("---")
-    st.header("2. Dati CliniciGenerali")
+    st.header("2. Dati Clinici Generali")
     luts_input = st.text_input("Sintomatologia / Note Anamnestiche", "LUTS moderati")
     eo_input = st.text_area("Esame Obiettivo", "Addome trattabile, non dolente.")
     consigli_input = st.text_area("Raccomandazioni", "Controllo periodico tra 12 mesi.")
@@ -96,9 +96,8 @@ if st.button("🚀 Genera Referto e Analisi"):
     st.subheader("📋 Referto Generato")
 
     if tipo_visita == "Visita tumore prostata":
-        # Determinazione Classe di Rischio e Parere DMT
-         parere_dmt = ""
-         classe_rischio = ""
+        parere_dmt = ""
+        classe_rischio = ""
 
         if "ISUP 1" in isup_group and psa < 10 and c_stage in ["cT1c", "cT2a"]:
             classe_rischio = "BASSO RISCHIO"
