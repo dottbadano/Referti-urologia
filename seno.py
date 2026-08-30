@@ -6,7 +6,8 @@ from utils import (
     genera_o_aggiorna_registro, 
     genera_pdf_referto, 
     genera_codice_univoco, 
-    render_anamnesi_generale
+    render_anamnesi_generale,
+    formatta_anamnesi_per_pdf
 )
 
 def render_modulo():
@@ -57,8 +58,9 @@ def render_modulo():
 
     st.divider()
 
-    # Anamnesi Generale Condivisa
-    anamnesi = render_anamnesi_generale()
+    # Anamnesi Generale Condivisa con prefisso univoco per evitare collisioni di chiavi
+    anamnesi = render_anamnesi_generale(prefix="seno")
+    anamnesi_ordinata_pdf = formatta_anamnesi_per_pdf(anamnesi)
 
     st.divider()
 
@@ -126,14 +128,6 @@ def render_modulo():
         raccomandazioni.append("Consigliato monitoraggio ecografico/mammografico ravvicinato a 6 mesi.")
     if familiarita_seno == "Mutazione genetica nota (BRCA1 / BRCA2 o simili)":
         raccomandazioni.append("Paziente ad alto rischio genetico: inserire in programma di sorveglianza integrata (RMN mammaria annuale).")
-    
-    # Integrazione dati anamnestici generali
-    if anamnesi["ipertensione"]:
-        raccomandazioni.append("Nota annessa: Paziente iperteso in anamnesi.")
-    if anamnesi["diabete"] != "No":
-        raccomandazioni.append(f"Nota annessa: Diabete mellito ({anamnesi['diabete']}).")
-    if anamnesi["fumo"] != "Non fumatore":
-        raccomandazioni.append(f"Nota annessa: Abitudine tabagica generale ({anamnesi['fumo']}).")
 
     raccomandazioni.append(f"Percorso impostato: {percorso}")
 
@@ -142,10 +136,13 @@ def render_modulo():
         if nome and cognome and codice_univoco:
             genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_univoco)
             
+            blocco_anamnesi_str = f"\nAnamnesi Generale:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
+            note_aggiuntive_str = f"\nNote Cliniche: {note_cliniche}" if note_cliniche.strip() else ""
+            
             dettagli_visita = {
                 "data": str(datetime.today().date()),
                 "tipo": "Visita Senologica - Modulo Seno",
-                "dettagli": f"Sintomi: {sintomi_seno} | Imaging: {imaging_seno} | Densità ACR: {densita_ghiandolare} | Familiarità: {familiarita_seno} | Anamnesi gen: Ipertensione={anamnesi['ipertensione']}, Diabete={anamnesi['diabete']}, Fumo={anamnesi['fumo']}. Note: {note_cliniche}"
+                "dettagli": f"Parametri Senologici:\n• Sintomi: {sintomi_seno}\n• Imaging: {imaging_seno}\n• Densità ACR: {densita_ghiandolare}\n• Familiarità: {familiarita_seno}{blocco_anamnesi_str}{note_aggiuntive_str}"
             }
             
             pdf_bytes = genera_pdf_referto(
