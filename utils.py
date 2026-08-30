@@ -57,19 +57,39 @@ def genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_paziente):
         print(f"Errore nel salvataggio registro: {e}")
 
 def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazioni):
-    """Genera un PDF in memoria pronto per il download su Streamlit."""
+    """Genera un PDF in memoria pronto per il download su Streamlit con brand 2gether e anagrafica completa."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     story = []
     
     styles = getSampleStyleSheet()
+    
+    # Stili per il brand 2gether
+    brand_title_style = ParagraphStyle(
+        'BrandTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        leading=28,
+        alignment=1, # Centrato
+        spaceAfter=2
+    )
+    brand_subtitle_style = ParagraphStyle(
+        'BrandSubtitle',
+        parent=styles['Normal'],
+        fontSize=10,
+        leading=12,
+        textColor=colors.HexColor('#555555'),
+        alignment=1, # Centrato
+        spaceAfter=15
+    )
+    
     title_style = ParagraphStyle(
         'DocTitle',
         parent=styles['Heading1'],
-        fontSize=18,
-        leading=22,
+        fontSize=14,
+        leading=18,
         textColor=colors.HexColor('#1A365D'),
-        spaceAfter=12
+        spaceAfter=10
     )
     heading_style = ParagraphStyle(
         'SectionHeading',
@@ -82,23 +102,43 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
     )
     normal_style = styles['Normal']
     
-    # Intestazione
-    story.append(Paragraph("<b>DSS UROLOGIA - REFERTO CLINICO</b>", title_style))
+    # 1. Intestazione Brand "2gether"
+    story.append(Paragraph('<font color="red"><b>2</b></font><b>gether</b>', brand_title_style))
+    story.append(Paragraph('<i>the answer is just next 2U</i>', brand_subtitle_style))
+    story.append(Spacer(1, 5))
+    
+    # Titolo del documento
+    story.append(Paragraph("<b>REFERTO CLINICO UROLOGICO</b>", title_style))
     story.append(Spacer(1, 10))
     
-    # Info Paziente
+    # Recupero Nome e Cognome dal registro se disponibile
+    nome_paziente = "-"
+    cognome_paziente = "-"
+    if os.path.exists(REGISTRO_FILE):
+        try:
+            with open(REGISTRO_FILE, "r", encoding="utf-8") as f:
+                reg_data = json.load(f)
+                if codice_paziente in reg_data:
+                    nome_paziente = reg_data[codice_paziente].get("nome", "-")
+                    cognome_paziente = reg_data[codice_paziente].get("cognome", "-")
+        except Exception:
+            pass
+
+    # Info Paziente con Nome, Cognome e Codice Univoco
     info_data = [
-        [Paragraph("<b>Codice Paziente:</b>", normal_style), Paragraph(codice_paziente, normal_style)],
+        [Paragraph("<b>Nome:</b>", normal_style), Paragraph(nome_paziente, normal_style)],
+        [Paragraph("<b>Cognome:</b>", normal_style), Paragraph(cognome_paziente, normal_style)],
+        [Paragraph("<b>Codice Univoco:</b>", normal_style), Paragraph(codice_paziente, normal_style)],
         [Paragraph("<b>Data Visita:</b>", normal_style), Paragraph(dati_visita.get("data", str(datetime.today().date())), normal_style)],
         [Paragraph("<b>Tipo Visita:</b>", normal_style), Paragraph(dati_visita.get("tipo", "-"), normal_style)],
-        [Paragraph("<b>Percorso Clinical:</b>", normal_style), Paragraph(percorso, normal_style)]
+        [Paragraph("<b>Percorso Clinico:</b>", normal_style), Paragraph(percorso, normal_style)]
     ]
     
     t_info = Table(info_data, colWidths=[130, 370])
     t_info.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F7FAFC')),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
-        ('PADDING', (0,0), (-1,-1), 6),
+        ('PADDING', (0,0), (-1,-1), 5),
     ]))
     story.append(t_info)
     story.append(Spacer(1, 15))
@@ -109,7 +149,7 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
     story.append(Spacer(1, 15))
     
     # Raccomandazioni / Next Steps
-    story.append(Paragraph("<b>Indicazioni e Indicazioni di Follow-up</b>", heading_style))
+    story.append(Paragraph("<b>Indicazioni e Follow-up</b>", heading_style))
     if note_raccomandazioni:
         for nota in note_raccomandazioni:
             story.append(Paragraph(f"• {nota}", normal_style))
