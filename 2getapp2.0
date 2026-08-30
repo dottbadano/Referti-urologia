@@ -140,7 +140,6 @@ def genera_pdf_referto(codice_paziente, dati_visita, esito_percorso, note_esami)
     story.append(Spacer(1, 25))
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#CBD5E0"), spaceAfter=10))
     
-    # FOOTER OBBLIGATORIO SU OGNI PDF
     footer_text = (
         "Documento prodotto automaticamente dal Sistema di Supporto Decisionale 2gether™ secondo le Linee Guida Urologiche Internazionali e Nazionali.<br/>"
         "Riferimenti Ufficiali: <b>EAU</b> (European Association of Urology) | <b>AUA</b> (American Urological Association) | "
