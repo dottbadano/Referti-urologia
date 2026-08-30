@@ -6,7 +6,8 @@ from utils import (
     genera_o_aggiorna_registro, 
     genera_pdf_referto, 
     genera_codice_univoco, 
-    render_anamnesi_generale
+    render_anamnesi_generale,
+    formatta_anamnesi_per_pdf
 )
 
 def render_modulo():
@@ -57,8 +58,9 @@ def render_modulo():
 
     st.divider()
 
-    # Anamnesi Generale Condivisa
-    anamnesi = render_anamnesi_generale()
+    # Anamnesi Generale Condivisa con prefisso univoco per evitare collisioni di chiavi
+    anamnesi = render_anamnesi_generale(prefix="vescica")
+    anamnesi_ordinata_pdf = formatta_anamnesi_per_pdf(anamnesi)
 
     st.divider()
 
@@ -125,14 +127,6 @@ def render_modulo():
         raccomandazioni.append("Citologia urinaria positiva: programmare cistoscopia in narcosi / mappatura e endoscopia delle alte vie urinarie.")
     if fumo_vescica == "Fumatore attivo":
         raccomandazioni.append("Fattore di rischio maggiore per carcinoma uroteliale: raccomandata cessazione fumo.")
-    
-    # Integrazione dati anamnestici generali
-    if anamnesi["ipertensione"]:
-        raccomandazioni.append("Nota annessa: Paziente iperteso in anamnesi.")
-    if anamnesi["diabete"] != "No":
-        raccomandazioni.append(f"Nota annessa: Diabete mellito ({anamnesi['diabete']}).")
-    if anamnesi["fumo"] != "Non fumatore":
-        raccomandazioni.append(f"Nota annessa: Abitudine tabagica generale ({anamnesi['fumo']}).")
 
     raccomandazioni.append(f"Percorso impostato: {percorso}")
 
@@ -141,10 +135,13 @@ def render_modulo():
         if nome and cognome and codice_univoco:
             genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_univoco)
             
+            blocco_anamnesi_str = f"\nAnamnesi Generale:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
+            note_aggiuntive_str = f"\nNote Cliniche: {note_cliniche}" if note_cliniche.strip() else ""
+            
             dettagli_visita = {
                 "data": str(datetime.today().date()),
                 "tipo": "Visita Urologica - Modulo Vescica",
-                "dettagli": f"LUTS: {sintomi_luts} | Citologia: {citologia} | Ematuria: {ematuria_vescica} | Imaging/Cistoscopia: {imaging_vescica} | Fumo: {fumo_vescica} | Anamnesi gen: Ipertensione={anamnesi['ipertensione']}, Diabete={anamnesi['diabete']}. Note: {note_cliniche}"
+                "dettagli": f"Parametri Vescicali:\n• Sintomi LUTS: {sintomi_luts}\n• Citologia Urinaria: {citologia}\n• Ematuria: {ematuria_vescica}\n• Imaging/Cistoscopia: {imaging_vescica}\n• Abitudine Tabagica: {fumo_vescica}{blocco_anamnesi_str}{note_aggiuntive_str}"
             }
             
             pdf_bytes = genera_pdf_referto(
