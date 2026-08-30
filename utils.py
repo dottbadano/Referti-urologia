@@ -7,7 +7,6 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
-# Elenco mesi per la selezione nelle app
 ELENCO_MESI = [
     "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
     "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
@@ -56,21 +55,20 @@ def genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_paziente):
     except Exception as e:
         print(f"Errore nel salvataggio registro: {e}")
 
-def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazioni):
-    """Genera un PDF in memoria pronto per il download su Streamlit con brand 2gether e anagrafica completa."""
+def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazioni, nome=None, cognome=None):
+    """Genera un PDF in memoria pronto per il download con brand 2gether e anagrafica completa."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     story = []
     
     styles = getSampleStyleSheet()
     
-    # Stili per il brand 2gether
     brand_title_style = ParagraphStyle(
         'BrandTitle',
         parent=styles['Heading1'],
         fontSize=24,
         leading=28,
-        alignment=1, # Centrato
+        alignment=1,
         spaceAfter=2
     )
     brand_subtitle_style = ParagraphStyle(
@@ -79,7 +77,7 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
         fontSize=10,
         leading=12,
         textColor=colors.HexColor('#555555'),
-        alignment=1, # Centrato
+        alignment=1,
         spaceAfter=15
     )
     
@@ -102,29 +100,29 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
     )
     normal_style = styles['Normal']
     
-    # Intestazione Brand "2gether" con il 2 in rosso e la frase sotto
+    # Intestazione 2gether con il 2 in rosso e la frase sotto
     story.append(Paragraph('<font color="red" size="28"><b>2</b></font><font size="24"><b>gether</b></font>', brand_title_style))
     story.append(Paragraph('<i>the answer is just next 2U</i>', brand_subtitle_style))
     story.append(Spacer(1, 10))
     
-    # Titolo del documento clinico
-    story.append(Paragraph("<b>REFERTO CLINICO - DSS UROLOGIA</b>", title_style))
+    story.append(Paragraph("<b>REFERTO CLINICO UROLOGICO</b>", title_style))
     story.append(Spacer(1, 10))
     
-    # Recupero Nome e Cognome dal registro se disponibile
-    nome_paziente = "-"
-    cognome_paziente = "-"
-    if os.path.exists(REGISTRO_FILE):
+    # Gestione Nome e Cognome (parametro diretto o fallback da registro)
+    nome_paziente = nome or "-"
+    cognome_paziente = cognome or "-"
+    
+    if (not nome or not cognome) and os.path.exists(REGISTRO_FILE):
         try:
             with open(REGISTRO_FILE, "r", encoding="utf-8") as f:
                 reg_data = json.load(f)
                 if codice_paziente in reg_data:
-                    nome_paziente = reg_data[codice_paziente].get("nome", "-")
-                    cognome_paziente = reg_data[codice_paziente].get("cognome", "-")
+                    nome_paziente = nome_paziente if nome_paziente != "-" else reg_data[codice_paziente].get("nome", "-")
+                    cognome_paziente = cognome_paziente if cognome_paziente != "-" else reg_data[codice_paziente].get("cognome", "-")
         except Exception:
             pass
 
-    # Info Paziente con Nome, Cognome e Codice Univoco
+    # Tabella Info Paziente
     info_data = [
         [Paragraph("<b>Nome:</b>", normal_style), Paragraph(nome_paziente, normal_style)],
         [Paragraph("<b>Cognome:</b>", normal_style), Paragraph(cognome_paziente, normal_style)],
@@ -148,7 +146,7 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
     story.append(Paragraph(dati_visita.get("dettagli", "Nessun dettaglio inserito."), normal_style))
     story.append(Spacer(1, 15))
     
-    # Raccomandazioni / Next Steps
+    # Raccomandazioni / Follow-up
     story.append(Paragraph("<b>Indicazioni e Follow-up</b>", heading_style))
     if note_raccomandazioni:
         for nota in note_raccomandazioni:
