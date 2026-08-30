@@ -102,13 +102,13 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
     )
     normal_style = styles['Normal']
     
-    # 1. Intestazione Brand "2gether"
-    story.append(Paragraph('<font color="red"><b>2</b></font><b>gether</b>', brand_title_style))
+    # Intestazione Brand "2gether" con il 2 in rosso e la frase sotto
+    story.append(Paragraph('<font color="red" size="28"><b>2</b></font><font size="24"><b>gether</b></font>', brand_title_style))
     story.append(Paragraph('<i>the answer is just next 2U</i>', brand_subtitle_style))
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 10))
     
-    # Titolo del documento
-    story.append(Paragraph("<b>REFERTO CLINICO UROLOGICO</b>", title_style))
+    # Titolo del documento clinico
+    story.append(Paragraph("<b>REFERTO CLINICO - DSS UROLOGIA</b>", title_style))
     story.append(Spacer(1, 10))
     
     # Recupero Nome e Cognome dal registro se disponibile
