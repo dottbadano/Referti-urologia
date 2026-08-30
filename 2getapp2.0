@@ -267,10 +267,10 @@ if organo_selezionato == "🧬 PROSTATA":
         st.subheader("📋 Inserimento Anagrafica Paziente")
         col_a, col_b = st.columns(2)
         with col_a:
-            nome_p = st.text_input("Nome Paziente")
-            data_nascita_p = st.date_input("Data di Nascita", datetime(1960, 1, 1))
+            nome_p = st.text_input("Nome Paziente", key="pros_nome")
+            data_nascita_p = st.date_input("Data di Nascita", datetime(1960, 1, 1), key="pros_nascita")
         with col_b:
-            cognome_p = st.text_input("Cognome Paziente")
+            cognome_p = st.text_input("Cognome Paziente", key="pros_cognome")
             hash_id = hashlib.md5(f"{nome_p}{cognome_p}{data_nascita_p}".encode()).hexdigest()[:6]
             codice_paziente = f"2GET-PROS-{hash_id.upper()}"
             st.info(f"🔑 **Codice Univoco Generato:** `{codice_paziente}`")
@@ -282,27 +282,29 @@ if organo_selezionato == "🧬 PROSTATA":
         with col1:
             isup_basale = st.selectbox(
                 "ISUP Group Bioptico:",
-                ["ISUP 1 (Gleason 3+3)", "ISUP 2 (Gleason 3+4)", "ISUP 3 (Gleason 4+3)", "ISUP 4 (Gleason 4+4)", "ISUP 5 (Gleason 9-10)"]
+                ["ISUP 1 (Gleason 3+3)", "ISUP 2 (Gleason 3+4)", "ISUP 3 (Gleason 4+3)", "ISUP 4 (Gleason 4+4)", "ISUP 5 (Gleason 9-10)"],
+                key="pros_isup"
             )
             isup_num = int(isup_basale.split()[1])
-            gleason_terziario = st.selectbox("Gleason Pattern Terziario:", ["Assente", "Pattern 4 Terziario", "Pattern 5 Terziario"])
+            gleason_terziario = st.selectbox("Gleason Pattern Terziario:", ["Assente", "Pattern 4 Terziario", "Pattern 5 Terziario"], key="pros_gleason")
 
             col_m, col_y = st.columns(2)
             with col_m:
-                mese_psa_b = st.selectbox("Mese PSA", ELENCO_MESI, index=datetime.today().month - 1)
+                mese_psa_b = st.selectbox("Mese PSA", ELENCO_MESI, index=datetime.today().month - 1, key="pros_mese_psa")
             with col_y:
-                anno_psa_b = st.number_input("Anno PSA", min_value=2000, max_value=2030, value=datetime.today().year)
+                anno_psa_b = st.number_input("Anno PSA", min_value=2000, max_value=2030, value=datetime.today().year, key="pros_anno_psa")
 
             num_mese_b = ELENCO_MESI.index(mese_psa_b) + 1
             data_psa_basale = datetime(anno_psa_b, num_mese_b, 1).date()
-            psa_basale = st.number_input("PSA Basale (ng/ml)", value=6.5, step=0.1)
+            psa_basale = st.number_input("PSA Basale (ng/ml)", value=6.5, step=0.1, key="pros_psa_basale")
 
         with col2:
             ct_stage = st.selectbox(
                 "Stadio T Clinico:",
-                ["cT1c (Inapprezzabile)", "cT2a (≤ metà di un lobo)", "cT2b (> metà di un lobo)", "cT2c (Entrambi i lobi)", "cT3a (Extracapsulare)", "cT3b (Vescicole)", "cT4 (Fissato/Adiacenti)"]
+                ["cT1c (Inapprezzabile)", "cT2a (≤ metade di un lobo)", "cT2b (> metade di un lobo)", "cT2c (Entrambi i lobi)", "cT3a (Extracapsulare)", "cT3b (Vescicole)", "cT4 (Fissato/Adiacenti)"],
+                key="pros_ct_stage"
             )
-            rmn_pirads = st.selectbox("Reperto mpRMN Prostatica:", ["PI-RADS 3", "PI-RADS 4", "PI-RADS 5", "ECE / SVI Sospetta alla RMN", "Non Eseguita"])
+            rmn_pirads = st.selectbox("Reperto mpRMN Prostatica:", ["PI-RADS 3", "PI-RADS 4", "PI-RADS 5", "ECE / SVI Sospetta alla RMN", "Non Eseguita"], key="pros_rmn")
 
         with col3:
             st.markdown("🎯 **Valutazione Rischio & Stadiatura**")
@@ -314,9 +316,9 @@ if organo_selezionato == "🧬 PROSTATA":
                 st.success("✅ **STADIATURA NON INDICATA AB INITIO**")
 
         st.markdown("---")
-        scelta_trattamento = st.selectbox("Trattamento Concordato / Scelto:", ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia"]) if not necessita_stadiatura else "In attesa di Stadiatura (DMT II)"
+        scelta_trattamento = st.selectbox("Trattamento Concordato / Scelto:", ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia"], key="pros_trattamento") if not necessita_stadiatura else "In attesa di Stadiatura (DMT II)"
 
-        if st.button("💾 Salvataggio & Genera Report PDF (Prostata)"):
+        if st.button("💾 Salvataggio & Genera Report PDF (Prostata)", key="pros_btn_save"):
             if not nome_p or not cognome_p:
                 st.error("Inserire Nome e Cognome del paziente.")
             else:
@@ -344,7 +346,8 @@ if organo_selezionato == "🧬 PROSTATA":
                     label="📄 Scarica Referto PDF Stampabile",
                     data=pdf_bytes,
                     file_name=f"Referto_PROSTATA_{codice_paziente}.pdf",
-                    mime="application/pdf"
+                    mime="application/pdf",
+                    key="pros_dl"
                 )
 
     elif modalita == "2. Seconda Visita / DMT: Referto Stadiatura & Decisione":
@@ -353,7 +356,7 @@ if organo_selezionato == "🧬 PROSTATA":
 
     elif modalita == "3. Controllo Successivo / Follow-up PSA":
         st.subheader("🔍 Richiama Paziente per Follow-up")
-        codice_search = st.text_input("Inserisci Codice Univoco Paziente:").strip().upper()
+        codice_search = st.text_input("Inserisci Codice Univoco Paziente:", key="pros_search_code").strip().upper()
 
         if codice_search in st.session_state["db_pazienti"]:
             paziente = st.session_state["db_pazienti"][codice_search]
@@ -363,11 +366,11 @@ if organo_selezionato == "🧬 PROSTATA":
             st.markdown("---")
             col_psa1, col_psa2, col_psa3 = st.columns(3)
             with col_psa1:
-                mese_psa_a = st.selectbox("Mese Prelievo PSA", ELENCO_MESI, index=datetime.today().month - 1)
+                mese_psa_a = st.selectbox("Mese Prelievo PSA", ELENCO_MESI, index=datetime.today().month - 1, key="pros_fu_mese")
             with col_psa2:
-                anno_psa_a = st.number_input("Anno Prelievo PSA", min_value=2000, max_value=2030, value=datetime.today().year)
+                anno_psa_a = st.number_input("Anno Prelievo PSA", min_value=2000, max_value=2030, value=datetime.today().year, key="pros_fu_anno")
             with col_psa3:
-                psa_attuale = st.number_input("Valore PSA Sierico (ng/ml):", min_value=0.0, value=float(paziente.get("ultimo_psa", 0.0)), step=0.01)
+                psa_attuale = st.number_input("Valore PSA Sierico (ng/ml):", min_value=0.0, value=float(paziente.get("ultimo_psa", 0.0)), step=0.01, key="pros_fu_psa")
 
             num_mese_a = ELENCO_MESI.index(mese_psa_a) + 1
             data_psa_attuale = datetime(anno_psa_a, num_mese_a, 1).date()
@@ -382,7 +385,7 @@ if organo_selezionato == "🧬 PROSTATA":
 
             st.info(f"**Indicazioni:** {res_fu['rec_psa']}")
 
-            if st.button("💾 Salvataggio Visita & Genera PDF Controllo"):
+            if st.button("💾 Salvataggio Visita & Genera PDF Controllo", key="pros_fu_save"):
                 paziente["ultimo_psa"] = psa_attuale
                 paziente["data_ultimo_psa"] = str(data_psa_attuale)
                 
@@ -403,11 +406,12 @@ if organo_selezionato == "🧬 PROSTATA":
                     label="📄 Scarica Referto Follow-up PDF",
                     data=pdf_bytes,
                     file_name=f"FollowUp_PROSTATA_{codice_search}.pdf",
-                    mime="application/pdf"
+                    mime="application/pdf",
+                    key="pros_fu_dl"
                 )
 
 # ==============================================================================
-# MODULO 2: VESCICA & UTUC (Integrato con correzione tasti e inserimento libero)
+# MODULO 2: VESCICA & UTUC (Integrato con correzione tasti ed esecuzione protetta)
 # ==============================================================================
 elif organo_selezionato == "💧 VESCICA & UTUC":
     st.title("💧 Carcinoma Uroteliale Vescicale & UTUC")
@@ -419,11 +423,12 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
             "2. Seconda Visita Post-TURBT (Istologia & Re-TURB)",
             "3. MIBC (≥T2) & Criteri di Elegibilità Chemioterapia"
         ],
-        horizontal=True
+        horizontal=True,
+        key="vescica_fase_radio"
     )
 
     # --------------------------------------------------------------------------
-    # FASE 1: PRIMA CISTOSCOPIA (Con chiavi univoche per evitare blocchi)
+    # FASE 1: PRIMA CISTOSCOPIA
     # --------------------------------------------------------------------------
     if fase_vescica == "1. Prima Cistoscopia & Diagnosi Iniziale":
         st.subheader("📋 1. Anagrafica e Primo Snodo Diagnostico")
@@ -631,7 +636,10 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
     elif fase_vescica == "2. Seconda Visita Post-TURBT (Istologia & Re-TURB)":
         st.subheader("📑 Seconda Visita Post-TURBT: Valutazione Istologica e Decisionale")
 
-        codici_esistenti = list(st.session_state["db_pazienti"].keys())
+        # Gestione sicura dei codici esistenti per evitare crash se il dizionario è vuoto
+        db_pazienti_memoria = st.session_state.get("db_pazienti", {})
+        codici_esistenti = list(db_pazienti_memoria.keys()) if isinstance(db_pazienti_memoria, dict) else []
+        
         if codici_esistenti:
             cod_sel = st.selectbox("Seleziona Codice Paziente esistente:", ["-- Seleziona o Inserisci nuovo --"] + codici_esistenti, key="vescica_sel_esistente")
         else:
@@ -748,6 +756,9 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                     }
                     if codice_paziente not in st.session_state["db_pazienti"]:
                         st.session_state["db_pazienti"][codice_paziente] = {"visite": []}
+
+                    if "visite" not in st.session_state["db_pazienti"][codice_paziente]:
+                        st.session_state["db_pazienti"][codice_paziente]["visite"] = []
 
                     st.session_state["db_pazienti"][codice_paziente]["visite"].append(dati_v)
                     st.session_state["db_pazienti"][codice_paziente]["istologia"] = {
