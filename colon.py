@@ -6,13 +6,13 @@ from utils import (
     genera_o_aggiorna_registro, 
     genera_pdf_referto, 
     genera_codice_univoco, 
-    render_anamnesi_generale
+    render_anamnesi_generale,
+    formatta_anamnesi_per_pdf
 )
 
 def render_modulo():
     st.subheader("🌀 Modulo Colon - Decision Support System")
     
-    # Anagrafica Paziente con ricerca o inserimento nuovo
     with st.expander("👤 Anagrafica Paziente", expanded=True):
         registro_esistente = {}
         if os.path.exists("registro_pazienti.json"):
@@ -57,12 +57,12 @@ def render_modulo():
 
     st.divider()
 
-    # Anamnesi Generale Condivisa
-    anamnesi = render_anamnesi_generale()
+    # Anamnesi Generale Condivisa con prefisso univoco
+    anamnesi = render_anamnesi_generale(prefix="colon")
+    anamnesi_ordinata_pdf = formatta_anamnesi_per_pdf(anamnesi)
 
     st.divider()
 
-    # Parametri Clinici Colon
     st.markdown("### 📋 Parametri Clinici e Valutazione Gastroenterologica")
     
     col_a, col_b = st.columns(2)
@@ -106,7 +106,6 @@ def render_modulo():
 
     st.divider()
 
-    # Percorso Clinico e Raccomandazioni
     st.markdown("### 🧭 Percorso Clinico e Raccomandazioni")
     
     percorso = st.selectbox(
@@ -128,25 +127,18 @@ def render_modulo():
     elif esame_endoscopico == "Polipo/i intestinale/i (rimosso/biopsiato)":
         raccomandazioni.append("In attesa di esame istologico sui polipi rimossi per definire l'intervallo di sorveglianza.")
     
-    # Integrazione dati anamnestici generali nelle raccomandazioni o dettagli
-    if anamnesi["ipertensione"]:
-        raccomandazioni.append("Nota annessa: Paziente iperteso in anamnesi.")
-    if anamnesi["diabete"] != "No":
-        raccomandazioni.append(f"Nota annessa: Diabete mellito ({anamnesi['diabete']}).")
-    if anamnesi["fumo"] != "Non fumatore":
-        raccomandazioni.append(f"Nota annessa: Abitudine tabagica ({anamnesi['fumo']}).")
-
     raccomandazioni.append(f"Percorso impostato: {percorso}")
 
-    # Generazione Referto PDF
     if st.button("Genera Referto PDF Colon", type="primary", key="btn_pdf_colon"):
         if nome and cognome and codice_univoco:
             genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_univoco)
             
+            blocco_anamnesi_str = f"\nAnamnesi Generale:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
+            
             dettagli_visita = {
                 "data": str(datetime.today().date()),
                 "tipo": "Visita Gastroenterologica - Modulo Colon",
-                "dettagli": f"Sintomi: {sintomi_intestinali} | Endoscopia: {esame_endoscopico} | Sangue Occulto: {sangue_occulto} | Familiarità: {familiarita}. Anamnesi gen: Ipertensione={anamnesi['ipertensione']}, Diabete={anamnesi['diabete']}, Fumo={anamnesi['fumo']}. Note: {note_cliniche}"
+                "dettagli": f"Parametri Gastroenterologici:\n• Sintomi: {sintomi_intestinali}\n• Endoscopia: {esame_endoscopico}\n• Sangue Occulto: {sangue_occulto}\n• Familiarità Colorettale: {familiarita}{blocco_anamnesi_str}\n\nNote Cliniche:\n{note_cliniche if note_cliniche else 'Nessuna nota aggiuntiva.'}"
             }
             
             pdf_bytes = genera_pdf_referto(
