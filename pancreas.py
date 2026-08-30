@@ -6,13 +6,13 @@ from utils import (
     genera_o_aggiorna_registro, 
     genera_pdf_referto, 
     genera_codice_univoco, 
-    render_anamnesi_generale
+    render_anamnesi_generale,
+    formatta_anamnesi_per_pdf
 )
 
 def render_modulo():
     st.subheader("🍋 Modulo Pancreas - Decision Support System")
     
-    # Anagrafica Paziente con ricerca o inserimento nuovo
     with st.expander("👤 Anagrafica Paziente", expanded=True):
         registro_esistente = {}
         if os.path.exists("registro_pazienti.json"):
@@ -57,12 +57,12 @@ def render_modulo():
 
     st.divider()
 
-    # Anamnesi Generale Condivisa
-    anamnesi = render_anamnesi_generale()
+    # Anamnesi Generale Condivisa con prefisso univoco
+    anamnesi = render_anamnesi_generale(prefix="pancreas")
+    anamnesi_ordinata_pdf = formatta_anamnesi_per_pdf(anamnesi)
 
     st.divider()
 
-    # Parametri Clinici Pancreas
     st.markdown("### 📋 Parametri Clinici e Valutazione Pancreatica")
     
     col_a, col_b = st.columns(2)
@@ -105,7 +105,6 @@ def render_modulo():
 
     st.divider()
 
-    # Percorso Clinico e Raccomandazioni
     st.markdown("### 🧭 Percorso Clinico e Raccomandazioni")
     
     percorso = st.selectbox(
@@ -127,25 +126,18 @@ def render_modulo():
     if "pancreatite" in imaging_pancreas.lower() or "Iperamilasemia" in funzione_pancreatica:
         raccomandazioni.append("Quadro di flogosi pancreatica: monitoraggio idratazione, supporto nutrizionale e valutazione eziologica (es. litiasica).")
     
-    # Integrazione dati anamnestici generali
-    if anamnesi["ipertensione"]:
-        raccomandazioni.append("Nota annessa: Paziente iperteso in anamnesi.")
-    if anamnesi["diabete"] != "No":
-        raccomandazioni.append(f"Nota annessa: Diabete mellito ({anamnesi['diabete']}).")
-    if anamnesi["fumo"] != "Non fumatore":
-        raccomandazioni.append(f"Nota annessa: Abitudine tabagica ({anamnesi['fumo']}).")
-
     raccomandazioni.append(f"Percorso impostato: {percorso}")
 
-    # Generazione Referto PDF
     if st.button("Genera Referto PDF Pancreas", type="primary", key="btn_pdf_pancreas"):
         if nome and cognome and codice_univoco:
             genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_univoco)
             
+            blocco_anamnesi_str = f"\nAnamnesi Generale:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
+            
             dettagli_visita = {
                 "data": str(datetime.today().date()),
                 "tipo": "Visita Gastroenterologica/Chirurgica - Modulo Pancreas",
-                "dettagli": f"Sintomi: {sintomi_pancreas} | Imaging: {imaging_pancreas} | Marker CA 19-9: {marker_tumorali} | Funzione: {funzione_pancreatica}. Anamnesi gen: Ipertensione={anamnesi['ipertensione']}, Diabete={anamnesi['diabete']}, Fumo={anamnesi['fumo']}. Note: {note_cliniche}"
+                "dettagli": f"Parametri Pancreatici:\n• Sintomi: {sintomi_pancreas}\n• Imaging: {imaging_pancreas}\n• Marker CA 19-9: {marker_tumorali}\n• Funzione Pancreatica: {funzione_pancreatica}{blocco_anamnesi_str}\n\nNote Cliniche:\n{note_cliniche if note_cliniche else 'Nessuna nota aggiuntiva.'}"
             }
             
             pdf_bytes = genera_pdf_referto(
