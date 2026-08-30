@@ -544,39 +544,66 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
         )
 
         if "VI-RADS ≤ 2" in rmn_eseguita:
-            st.success("✅ **RMN CERTIFICA MALATTIA NON MUSCOLO-INVASIVA (VI-RADS ≤ 2)**")
+            st.success("✅ **RMN NEGATIVA / VI-RADS ≤ 2 (Esclude infiltrazione muscolare)**")
         elif "VI-RADS ≥ 3" in rmn_eseguita:
-            st.warning("⚠️ **RMN SOSPESA INFILTRAZIONE (VI-RADS ≥ 3)**")
+            st.warning("⚠️ **RMN SOSPETTA INFILTRAZIONE (VI-RADS ≥ 3)**")
 
         st.markdown("---")
-        st.subheader("⚖️ 3. Indicazioni Cliniche & Avviso Re-TURB")
+        st.subheader("⚖️ 3. Indicazioni Cliniche & Avviso Re-TURB o MIBC")
 
         richiede_returb = False
+        is_mibc = False
 
         if st_pT == "-- Seleziona pT --" or st_grado == "-- Seleziona Grado --":
             st.error("⛔ **ATTENZIONE**: I campi **pT** e **Grado (LG/HG)** sono **OBBLIGATORI** per procedere con il DSS.")
         else:
-            if "pT1" in st_pT:
-                richiede_returb = True
-                motivo_returb = "Stadio pT1 (Tutti i pT1 richiedono Re-TURB a 2-6 settimane)."
-            elif "HG" in st_grado and "Assente" in presenza_muscolo:
-                richiede_returb = True
-                motivo_returb = "Resezione High Grade (HG) priva di tonaca muscolare nel preparato."
-            elif "Incompleta" in presenza_muscolo:
-                richiede_returb = True
-                motivo_returb = "Resezione primaria incompleta."
-
-            if richiede_returb:
-                st.error(f"⚠️ **INDICAZIONE A RE-TURB (Second Look)**\n\n**Motivazione:** {motivo_returb}")
+            # Controllo MIBC rigoroso (basato su pT2, muscolo infiltrato o RMN con VI-RADS alto)
+            if "≥ pT2" in st_pT or "Infiltrata" in presenza_muscolo or "VI-RADS ≥ 3" in rmn_eseguita:
+                is_mibc = True
+                motivo_mibc = "Malattia Muscolo-Invasiva (MIBC) confermata istologicamente o fortemente sospetta all'imaging (VI-RADS ≥ 3)."
+            
+            if is_mibc:
+                st.error(f"🚨 **DIAGNOSI DI MALATTIA MUSCOLO-INVASIVA (MIBC / ≥ pT2)**\n\n**Indicazione:** {motivo_mibc}\n\n*Nota: Escluso il percorso superficiale / instillazioni. Richiesta stadiatura globale e valutazione per trattamento radicale.*")
             else:
-                st.info("ℹ️ Re-TURB non routinariamente indicata. Procedere con terapia endovescicale o sorveglianza.")
+                # Gestione pT1 con muscolo assente ma RMN protettiva (VI-RADS <= 2)
+                if "pT1" in st_pT:
+                    if "Assente" in presenza_muscolo:
+                        if "VI-RADS ≤ 2" in rmn_eseguita:
+                            richiede_returb = False
+                            motivo_returb = "Stadio pT1 con muscolare assente, ma mpRMN negativa (VI-RADS ≤ 2): si riconosce la non necessità di Re-TURB d'emblee."
+                            st.success(f"ℹ️ **NOTA CLINICA**: {motivo_returb}")
+                        else:
+                            richiede_returb = True
+                            motivo_returb = "Stadio pT1 con tonaca muscolare assente nel preparato e assenza di RMN protettiva (o VI-RADS alto)."
+                    else:
+                        richiede_returb = True
+                        motivo_returb = "Stadio pT1 (Indicazione standard a Re-TURB a 2-6 settimane)."
+                elif "HG" in st_grado and "Assente" in presenza_muscolo:
+                    if "VI-RADS ≤ 2" in rmn_eseguita:
+                        richiede_returb = False
+                        motivo_returb = "Resezione High Grade con muscolo assente, ma mpRMN negativa (VI-RADS ≤ 2): rivalutata non stretta necessità di Re-TURB."
+                        st.success(f"ℹ️ **NOTA CLINICA**: {motivo_returb}")
+                    else:
+                        richiede_returb = True
+                        motivo_returb = "Resezione High Grade (HG) priva di tonaca muscolare senza supporto RMN negativo."
+                elif "Incompleta" in presenza_muscolo:
+                    richiede_returb = True
+                    motivo_returb = "Resezione primaria incompleta."
+
+                if richiede_returb:
+                    st.error(f"⚠️ **INDICAZIONE A RE-TURB (Second Look)**\n\n**Motivazione:** {motivo_returb}")
+                else:
+                    if not "pT1" in st_pT and "Assente" in presenza_muscolo and "VI-RADS ≤ 2" in rmn_eseguita:
+                        st.info("ℹ️ Tumore non muscolo-invasivo con imaging di supporto favorevole. Valutare follow-up o instillazioni secondo rischio EORTC.")
+                    else:
+                        st.info("ℹ️ Tumore non muscolo-invasivo. Valutare eventuale terapia endovescicale adiuvante in base al rischio.")
 
             testo_post_turb = (
                 f"VISITA POST-TURBT - VALUTAZIONE ISTOLOGICA\n"
                 f"- Istotipo e Stadio: {st_pT}, {st_grado}\n"
                 f"- Valutazione Tonaca Muscolare: {presenza_muscolo}\n"
                 f"- RMN Vescicale: {rmn_eseguita}\n"
-                f"- DECISIONE CLINICA: " + ("Eventuale Re-TURB indicata." if richiede_returb else "Gestione standard.")
+                f"- DECISIONE CLINICA: " + ("Malattia MIBC (≥pT2)." if is_mibc else ("Re-TURB indicata." if richiede_returb else "Re-TURB evitata per RMN negativa / basso rischio."))
             )
 
             referto_post = st.text_area("Testo del Referto II Visita Post-TURBT:", value=testo_post_turb, height=160, key="vescica_testo_post")
@@ -600,7 +627,8 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                     st.session_state["db_pazienti"][codice_paziente]["istologia"] = {
                         "pT": st_pT,
                         "grado": st_grado,
-                        "re_turb_indicata": richiede_returb
+                        "re_turb_indicata": richiede_returb,
+                        "is_mibc": is_mibc
                     }
                     salva_db_pazienti(st.session_state["db_pazienti"])
                     st.success(f"II Visita registrata con successo per il paziente `{codice_paziente}`!")
