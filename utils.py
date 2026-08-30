@@ -1,220 +1,304 @@
+import streamlit as st
 import os
 import json
-import io
 import random
 import string
-from datetime import datetime
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-import streamlit as st
-
-ELENCO_MESI = [
-    "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
-    "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
-]
-
-DB_FILE = "db_pazienti.json"
-REGISTRO_FILE = "registro_pazienti.json"
-
-def carica_db_pazienti():
-    """Carica il database locale dei pazienti se esiste."""
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
-    return {}
-
-def salva_db_pazienti(db_data):
-    """Salva il database locale dei pazienti."""
-    try:
-        with open(DB_FILE, "w", encoding="utf-8") as f:
-            json.dump(db_data, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        print(f"Errore nel salvataggio DB: {e}")
+from reportlab.pdfgen import canvas
+from io import BytesIO
 
 def genera_codice_univoco(nome, cognome):
-    """Genera automaticamente un codice univoco basato su nome e cognome."""
-    if nome and cognome:
-        iniziali = f"{nome[0].upper()}{cognome[0].upper()}"
-        rand_num = ''.join(random.choices(string.digits, k=4))
-        return f"ID-{iniziali}-{rand_num}"
-    return f"ID-PAT-{''.join(random.choices(string.digits, k=6))}"
+    """Genera un codice univoco basato sulle iniziali e numeri casuali."""
+    n_init = nome[:2].upper() if len(nome) >= 2 else nome.upper()
+    c_init = cognome[:2].upper() if len(cognome) >= 2 else cognome.upper()
+    rand_num = ''.join(random.choices(string.digits, k=4))
+    return f"{c_init}{n_init}-{rand_num}"
 
-def render_anamnesi_generale():
-    """Crea la sezione riutilizzabile dell'anamnesi generale con i fattori di rischio."""
-    st.markdown("### 📋 Anamnesi Generale e Fattori di Rischio")
+def genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_univoco):
+    """Salva o aggiorna il registro pazienti in un file JSON locale."""
+    registro = {}
+    if os.path.exists("registro_pazienti.json"):
+        try:
+            with open("registro_pazienti.json", "r", encoding="utf-8") as f:
+                registro = json.load(f)
+        except Exception:
+            registro = {}
+            
+    registro[codice_univoco] = {
+        "nome": nome,
+        "cognome": cognome,
+        "data_nascita": str(data_nascita),
+        "ultimo_aggiornamento": str(datetime.today().date()) if 'datetime' in globals() else ""
+    }
     
-    if "anamnesi_comune" not in st.session_state:
-        st.session_state["anamnesi_comune"] = {
-            "ipertensione": False,
-            "diabete": "No",
-            "fumo": "Non fumatore",
-            "familiarita_organi": []
-        }
+    with open("registro_pazienti.json", "w", encoding="utf-8") as f:
+        json.dump(registro, f, ensure_ascii=False, indent=4)
+
+def render_anamnesi_generale(prefix="gen"):
+    """Renderizza l'inquadramento clinico generale con campi facoltativi."""
+    st.markdown("#### 📋 Anamnesi Generale Paziente")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        ipertensione = st.checkbox("Ipertensione arteriosa", value=st.session_state["anamnesi_comune"]["ipertensione"])
+        ipertensione = st.checkbox("Ipertensione Arteriosa", key=f"{prefix}_ipertensione")
+        cardiopatia = st.checkbox("Cardiopatia / Ischemia", key=f"{prefix}_cardiopatia")
+        diabete = st.selectbox("Diabete Mellito", ["No", "Diabete Tipo 1", "Diabete Tipo 2"], key=f"{prefix}_diabete")
         
-        diabete_opts = ["No", "Sì (Terapia Orale)", "Sì (Terapia Insulinica)"]
-        curr_diabete = st.session_state["anamnesi_comune"]["diabete"]
-        diabete_idx = diabete_opts.index(curr_diabete) if curr_diabete in diabete_opts else 0
-        diabete = st.selectbox("Diabete Mellito", diabete_opts, index=diabete_idx, key="glob_diabete")
-        
+        insuff_renale = st.checkbox("Insufficienza Renale Cronica", key=f"{prefix}_insuff_renale")
+        creatinina = ""
+        if insuff_renale:
+            creatinina = st.text_input("Valore Creatinina (mg/dL)", placeholder="Es. 1.4 mg/dL", key=f"{prefix}_creatinina")
+            
     with col2:
-        fumo_opts = ["Non fumatore", "Ex fumatore", "Fumatore attivo"]
-        curr_fumo = st.session_state["anamnesi_comune"]["fumo"]
-        fumo_idx = fumo_opts.index(curr_fumo) if curr_fumo in fumo_opts else 0
-        fumo = st.selectbox("Abitudine Tabagica", fumo_opts, index=fumo_idx, key="glob_fumo")
+        fumo = st.selectbox("Abitudine Tabagica", ["Non fumatore", "Ex fumatore", "Fumatore attivo"], key=f"{prefix}_fumo")
         
-    st.markdown("**Familiarità per Tumori (Organi Interessati):**")
-    organi_list = ["Prostata", "Vescica", "Rene", "Testicolo", "Polmone", "Colon", "Utero", "Ovaio", "Seno", "Fegato", "Pancreas"]
+        ha_allergie = st.checkbox("Allergie", key=f"{prefix}_ha_allergie")
+        specifica_allergie = ""
+        if ha_allergie:
+            specifica_allergie = st.text_input("Specificare a cosa è allergico", placeholder="Es. Penicillina, Lattice...", key=f"{prefix}_specifica_allergie")
+
+    st.markdown("---")
     
-    cols = st.columns(4)
-    familiarita_selezionata = []
-    for idx, organo in enumerate(organi_list):
-        col_idx = idx % 4
-        with cols[col_idx]:
-            val_precedente = organo in st.session_state["anamnesi_comune"]["familiarita_organi"]
-            if st.checkbox(f"{organo}", value=val_precedente, key=f"fam_{organo}"):
-                familiarita_selezionata.append(organo)
-                
-    dati_anamnesi = {
+    col_v1, col_v2 = st.columns(2)
+    with col_v1:
+        scala_performance = st.selectbox(
+            "Scala di Performance / Stato Generale (ECOG Performance Status)",
+            [
+                "Non valutato / Non applicabile",
+                "0 - Pienamente attivo, capace di svolgere tutte le normali attività",
+                "1 - Limitato nelle attività fisiche pesanti, ma deambulante",
+                "2 - Deambulante e capace di cura personale, incapace di lavoro",
+                "3 - Capace di limitata cura personale, confinato a letto/sedia (>50% del giorno)",
+                "4 - Completamente disabile, confinato a letto o sedia"
+            ],
+            key=f"{prefix}_ecog"
+        )
+    with col_v2:
+        esegue_mmse = st.checkbox("Eseguito Mini-Mental State Examination (MMSE) / Test Cognitivo", key=f"{prefix}_check_mmse")
+        valore_mmse = ""
+        if esegue_mmse:
+            valore_mmse = st.text_input("Punteggio MMSE / Test (es. 28/30)", placeholder="Punteggio ottenuto...", key=f"{prefix}_valore_mmse")
+
+    st.markdown("---")
+
+    st.markdown("##### ⚖️ Stato Nutrizionale e Parametri Antropometrici")
+    col_nut1, col_nut2, col_nut3 = st.columns(3)
+    with col_nut1:
+        peso = st.number_input("Peso (kg)", min_value=0.0, max_value=300.0, value=0.0, step=0.5, key=f"{prefix}_peso")
+    with col_nut2:
+        altezza = st.number_input("Altezza (cm)", min_value=0.0, max_value=250.0, value=0.0, step=1.0, key=f"{prefix}_altezza")
+    with col_nut3:
+        bmi_val = 0.0
+        if peso > 0 and altezza > 0:
+            alt_m = altezza / 100.0
+            bmi_val = round(peso / (alt_m ** 2), 1)
+        st.metric("Indice di Massa Corporea (BMI)", f"{bmi_val} kg/m²" if bmi_val > 0 else "Non calcolabile")
+
+    st.markdown("---")
+
+    st.markdown("##### 🚶 Autonomia Funzionale")
+    col_aut1, col_aut2 = st.columns(2)
+    with col_aut1:
+        scala_adl = st.selectbox(
+            "Scala ADL (Activities of Daily Living)",
+            ["Non valutato", "Indipendente (6/6)", "Parzialmente dipendente (3-5/6)", "Fortemente dipendente (0-2/6)"],
+            key=f"{prefix}_adl"
+        )
+    with col_aut2:
+        scala_iadl = st.selectbox(
+            "Scala IADL (Instrumental Activities of Daily Living)",
+            ["Non valutato", "Indipendente (8/8)", "Parzialmente dipendente (4-7/8)", "Fortemente dipendente (0-3/8)"],
+            key=f"{prefix}_iadl"
+        )
+
+    st.markdown("---")
+
+    st.markdown("##### 🧬 Anamnesi Familiare Oncologica (Familiarità per Tumori)")
+    st.write("Selezionare gli organi con stretta familiarità neoplastica nota:")
+    col_fam1, col_fam2, col_fam3, col_fam4 = st.columns(4)
+    with col_fam1:
+        fam_prostata = st.checkbox("Prostata", key=f"{prefix}_fam_prostata")
+        fam_seno = st.checkbox("Seno", key=f"{prefix}_fam_seno")
+    with col_fam2:
+        fam_utero = st.checkbox("Utero / Endometrio", key=f"{prefix}_fam_utero")
+        fam_ovaio = st.checkbox("Ovaio", key=f"{prefix}_fam_ovaio")
+    with col_fam3:
+        fam_vescica = st.checkbox("Vescica / Urotelio", key=f"{prefix}_fam_vescica")
+        fam_colon = st.checkbox("Colon-Retto", key=f"{prefix}_fam_colon")
+    with col_fam4:
+        fam_altro = st.checkbox("Altro / Negativa", key=f"{prefix}_fam_altro")
+
+    st.markdown("---")
+
+    st.markdown("##### 💉 Stato Vaccinale Principale")
+    col_vac1, col_vac2 = st.columns(2)
+    with col_vac1:
+        vac_antinfluenzale = st.checkbox("Antinfluenzale (Ultima stagione)", key=f"{prefix}_vac_influenzale")
+        vac_pneumococco = st.checkbox("Anti-Pneumococco", key=f"{prefix}_vac_pneumococco")
+    with col_vac2:
+        vac_zoster = st.checkbox("Anti-Herpes Zoster", key=f"{prefix}_vac_zoster")
+        vac_covid = st.checkbox("Anti-COVID (Aggiornato)", key=f"{prefix}_vac_covid")
+
+    st.markdown("---")
+    interventi_chirurgici = st.text_area("Anamnesi Interventi Chirurgici Subiti", placeholder="Elencare eventuali interventi precedenti...", key=f"{prefix}_interventi")
+    anamnesi_farmacologica = st.text_area("Anamnesi Farmacologica (Terapia in corso)", placeholder="Farmaci assunti abitualmente...", key=f"{prefix}_farmacologica")
+        
+    organi_fam = []
+    if fam_prostata: organi_fam.append("Prostata")
+    if fam_seno: organi_fam.append("Seno")
+    if fam_utero: organi_fam.append("Utero")
+    if fam_ovaio: organi_fam.append("Ovaio")
+    if fam_vescica: organi_fam.append("Vescica")
+    if fam_colon: organi_fam.append("Colon-Retto")
+    if fam_altro: organi_fam.append("Altro/Negativa")
+    str_fam = ", ".join(organi_fam) if organi_fam else ""
+
+    vaccini = []
+    if vac_antinfluenzale: vaccini.append("Antinfluenzale")
+    if vac_pneumococco: vaccini.append("Anti-Pneumococco")
+    if vac_zoster: vaccini.append("Anti-Herpes Zoster")
+    if vac_covid: vaccini.append("Anti-COVID")
+    str_vac = ", ".join(vaccini) if vaccini else ""
+
+    return {
         "ipertensione": ipertensione,
+        "cardiopatia": cardiopatia,
         "diabete": diabete,
         "fumo": fumo,
-        "familiarita_organi": familiarita_selezionata
+        "insuff_renale": insuff_renale,
+        "creatinina": creatinina,
+        "ha_allergie": ha_allergie,
+        "specifica_allergie": specifica_allergie,
+        "ecog_performance": scala_performance,
+        "mmse_eseguito": esegue_mmse,
+        "mmse_punteggio": valore_mmse,
+        "peso": peso,
+        "altezza": altezza,
+        "bmi": bmi_val,
+        "scala_adl": scala_adl,
+        "scala_iadl": scala_iadl,
+        "familiarita_oncologica": str_fam,
+        "stato_vaccinale": str_vac,
+        "interventi_chirurgici": interventi_chirurgici,
+        "anamnesi_farmacologica": anamnesi_farmacologica
     }
-    st.session_state["anamnesi_comune"] = dati_anamnesi
-    
-    return dati_anamnesi
 
-def genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_paziente):
-    """Mantiene un registro anagrafico base."""
-    registro = {}
-    if os.path.exists(REGISTRO_FILE):
-        try:
-            with open(REGISTRO_FILE, "r", encoding="utf-8") as f:
-                registro = json.load(f)
-        except Exception:
-            registro = {}
+def formatta_anamnesi_per_pdf(anamnesi):
+    """Genera una stringa pulita ed ordinata contenente SOLO i campi anamnestici flaggati o compilati, senza spazi vuoti."""
+    linee = []
     
-    registro[codice_paziente] = {
-        "nome": nome,
-        "cognome": cognome,
-        "data_nascita": str(data_nascita)
-    }
-    
-    try:
-        with open(REGISTRO_FILE, "w", encoding="utf-8") as f:
-            json.dump(registro, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        print(f"Errore nel salvataggio registro: {e}")
-
-def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazioni, nome=None, cognome=None):
-    """Genera un PDF in memoria pronto per il download con brand 2gether e anagrafica completa."""
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
-    story = []
-    
-    styles = getSampleStyleSheet()
-    
-    brand_title_style = ParagraphStyle(
-        'BrandTitle',
-        parent=styles['Heading1'],
-        fontSize=24,
-        leading=28,
-        alignment=1,
-        spaceAfter=2
-    )
-    brand_subtitle_style = ParagraphStyle(
-        'BrandSubtitle',
-        parent=styles['Normal'],
-        fontSize=10,
-        leading=12,
-        textColor=colors.HexColor('#555555'),
-        alignment=1,
-        spaceAfter=15
-    )
-    
-    title_style = ParagraphStyle(
-        'DocTitle',
-        parent=styles['Heading1'],
-        fontSize=14,
-        leading=18,
-        textColor=colors.HexColor('#1A365D'),
-        spaceAfter=10
-    )
-    heading_style = ParagraphStyle(
-        'SectionHeading',
-        parent=styles['Heading2'],
-        fontSize=12,
-        leading=15,
-        textColor=colors.HexColor('#2B6CB0'),
-        spaceBefore=10,
-        spaceAfter=6
-    )
-    normal_style = styles['Normal']
-    
-    # Intestazione 2gether con il 2 in rosso e la frase sotto
-    story.append(Paragraph('<font color="red" size="28"><b>2</b></font><font size="24"><b>gether</b></font>', brand_title_style))
-    story.append(Paragraph('<i>the answer is just next 2U</i>', brand_subtitle_style))
-    story.append(Spacer(1, 10))
-    
-    story.append(Paragraph("<b>REFERTO CLINICO</b>", title_style))
-    story.append(Spacer(1, 10))
-    
-    nome_paziente = nome or "-"
-    cognome_paziente = cognome or "-"
-    
-    if (not nome or not cognome) and os.path.exists(REGISTRO_FILE):
-        try:
-            with open(REGISTRO_FILE, "r", encoding="utf-8") as f:
-                reg_data = json.load(f)
-                if codice_paziente in reg_data:
-                    nome_paziente = nome_paziente if nome_paziente != "-" else reg_data[codice_paziente].get("nome", "-")
-                    cognome_paziente = cognome_paziente if cognome_paziente != "-" else reg_data[codice_paziente].get("cognome", "-")
-        except Exception:
-            pass
-
-    # Tabella Info Paziente
-    info_data = [
-        [Paragraph("<b>Nome:</b>", normal_style), Paragraph(nome_paziente, normal_style)],
-        [Paragraph("<b>Cognome:</b>", normal_style), Paragraph(cognome_paziente, normal_style)],
-        [Paragraph("<b>Codice Univoco:</b>", normal_style), Paragraph(codice_paziente, normal_style)],
-        [Paragraph("<b>Data Visita:</b>", normal_style), Paragraph(dati_visita.get("data", str(datetime.today().date())), normal_style)],
-        [Paragraph("<b>Tipo Visita:</b>", normal_style), Paragraph(dati_visita.get("tipo", "-"), normal_style)],
-        [Paragraph("<b>Percorso Clinico:</b>", normal_style), Paragraph(percorso, normal_style)]
-    ]
-    
-    t_info = Table(info_data, colWidths=[130, 370])
-    t_info.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F7FAFC')),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
-        ('PADDING', (0,0), (-1,-1), 5),
-    ]))
-    story.append(t_info)
-    story.append(Spacer(1, 15))
-    
-    # Dettagli Clinici
-    story.append(Paragraph("<b>Dettagli Clinici e Parametri</b>", heading_style))
-    story.append(Paragraph(dati_visita.get("dettagli", "Nessun dettaglio inserito."), normal_style))
-    story.append(Spacer(1, 15))
-    
-    # Raccomandazioni / Follow-up
-    story.append(Paragraph("<b>Indicazioni e Follow-up</b>", heading_style))
-    if note_raccomandazioni:
-        for nota in note_raccomandazioni:
-            story.append(Paragraph(f"• {nota}", normal_style))
-            story.append(Spacer(1, 4))
-    else:
-        story.append(Paragraph("Nessuna indicazione specifica.", normal_style))
+    patologie = []
+    if anamnesi.get("ipertensione"): patologie.append("Ipertensione Arteriosa")
+    if anamnesi.get("cardiopatia"): patologie.append("Cardiopatia / Ischemia")
+    if anamnesi.get("diabete") and anamnesi.get("diabete") != "No": patologie.append(f"Diabete: {anamnesi['diabete']}")
+    if anamnesi.get("insuff_renale"): 
+        crea = anamnesi.get('creatinina', '').strip()
+        patologie.append(f"Insufficienza Renale Cronica" + (f" (Creatinina: {crea} mg/dL)" if crea else ""))
         
-    doc.build(story)
+    if patologie:
+        linee.append(f"• Condizioni Cliniche: {', '.join(patologie)}")
+        
+    fumo = anamnesi.get("fumo")
+    if fumo and fumo != "Non fumatore":
+        linee.append(f"• Abitudine Tabagica: {fumo}")
+        
+    if anamnesi.get("ha_allergie"):
+        spec = anamnesi.get("specifica_allergie", "").strip()
+        linee.append(f"• Allergie: {spec if spec else 'Presenti'}")
+        
+    ecog = anamnesi.get("ecog_performance")
+    if ecog and "Non valutato" not in ecog:
+        linee.append(f"• ECOG Performance Status: {ecog}")
+        
+    if anamnesi.get("mmse_eseguito"):
+        punteggio = anamnesi.get("mmse_punteggio", "").strip()
+        linee.append(f"• Test Cognitivo MMSE: {punteggio}")
+        
+    peso = anamnesi.get("peso", 0)
+    altezza = anamnesi.get("altezza", 0)
+    bmi = anamnesi.get("bmi", 0)
+    if peso > 0 and altezza > 0:
+        linee.append(f"• Parametri Antropometrici: Peso {peso} kg, Altezza {altezza} cm, BMI {bmi} kg/m²")
+        
+    adl = anamnesi.get("scala_adl")
+    if adl and "Non valutato" not in adl:
+        linee.append(f"• Scala ADL: {adl}")
+        
+    iadl = anamnesi.get("scala_iadl")
+    if iadl and "Non valutato" not in iadl:
+        linee.append(f"• Scala IADL: {iadl}")
+        
+    fam = anamnesi.get("familiarita_oncologica")
+    if fam:
+        linee.append(f"• Familiarità Oncologica: {fam}")
+        
+    vac = anamnesi.get("stato_vaccinale")
+    if vac:
+        linee.append(f"• Stato Vaccinale: {vac}")
+        
+    interventi = anamnesi.get("interventi_chirurgici", "").strip()
+    if interventi:
+        linee.append(f"• Interventi Chirurgici: {interventi}")
+        
+    farmacologica = anamnesi.get("anamnesi_farmacologica", "").strip()
+    if farmacologica:
+        linee.append(f"• Terapia / Anamnesi Farmacologica: {farmacologica}")
+        
+    return "\n".join(linee) if linee else ""
+
+def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazioni, nome, cognome):
+    """Funzione di generazione PDF di base integrata."""
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    
+    # Intestazione
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, height - 50, "Decision Support System - Referto Clinico")
+    
+    c.setFont("Helvetica", 10)
+    c.drawString(50, height - 70, f"Data: {dati_visita.get('data')}")
+    c.drawString(50, height - 85, f"Paziente: {cognome} {nome} (ID: {codice_paziente})")
+    c.drawString(50, height - 100, f"Tipologia: {dati_visita.get('tipo')}")
+    
+    c.line(50, height - 110, width - 50, height - 110)
+    
+    # Contenuti Dettagli / Anamnesi
+    y = height - 130
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Dettagli Clinici e Anamnesi:")
+    y -= 20
+    
+    c.setFont("Helvetica", 10)
+    dettagli_testo = dati_visita.get('dettagli', '')
+    for line in dettagli_testo.split('\n'):
+        if y < 100:
+            c.showPage()
+            y = height - 50
+        c.drawString(60, y, line)
+        y -= 15
+        
+    y -= 10
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Percorso Clinico Impostato:")
+    y -= 20
+    c.setFont("Helvetica", 10)
+    c.drawString(60, y, f"• {percorso}")
+    y -= 25
+    
+    if note_raccomandazioni:
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(50, y, "Raccomandazioni e Note:")
+        y -= 20
+        c.setFont("Helvetica", 10)
+        for rec in note_raccomandazioni:
+            if y < 100:
+                c.showPage()
+                y = height - 50
+            c.drawString(60, y, f"- {rec}")
+            y -= 15
+            
+    c.save()
     buffer.seek(0)
     return buffer.getvalue()
