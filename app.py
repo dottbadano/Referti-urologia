@@ -25,7 +25,19 @@ st.sidebar.markdown(
 
 scelta_modulo = st.sidebar.radio(
     "Seleziona Modulo Organo:",
-    ["🧬 Prostata", "💧 Vescica", "🫘 Rene", "⚾ Testicolo"]
+    [
+        "🧬 Prostata", 
+        "💧 Vescica", 
+        "🫘 Rene", 
+        "⚾ Testicolo", 
+        "🫁 Polmone", 
+        "🌀 Colon", 
+        "♀️ Utero", 
+        "🌸 Ovaio", 
+        "🎀 Seno", 
+        "🔶 Fegato", 
+        "🍋 Pancreas"
+    ]
 )
 
 # Caricamento moduli dinamico
@@ -36,6 +48,29 @@ elif scelta_modulo == "💧 Vescica":
     import vescica
     vescica.render_modulo()
 elif scelta_modulo == "🫘 Rene":
-    st.info("Modulo Rene in fase di creazione...")
+    import rene
+    rene.render_modulo()
 elif scelta_modulo == "⚾ Testicolo":
-    st.info("Modulo Testicolo in fase di creazione...")
+    import testicolo
+    testicolo.render_modulo()
+elif scelta_modulo == "🫁 Polmone":
+    import polmone
+    polmone.render_modulo()
+elif scelta_modulo == "🌀 Colon":
+    import colon
+    colon.render_modulo()
+elif scelta_modulo == "♀️ Utero":
+    import utero
+    utero.render_modulo()
+elif scelta_modulo == "🌸 Ovaio":
+    import ovaio
+    ovaio.render_modulo()
+elif scelta_modulo == "🎀 Seno":
+    import seno
+    seno.render_modulo()
+elif scelta_modulo == "🔶 Fegato":
+    import fegato
+    fegato.render_modulo()
+elif scelta_modulo == "🍋 Pancreas":
+    import pancreas
+    pancreas.render_modulo()
