@@ -1,14 +1,9 @@
 import csv
 from datetime import datetime
 import hashlib
-import io
 import json
 import math
 import os
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 import streamlit as st
 
 # ==============================================================================
@@ -59,97 +54,6 @@ ELENCO_MESI = [
     "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
     "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
 ]
-
-# ==============================================================================
-# MOTORE GENERAZIONE PDF UNIFICATO (Con Footer Normativo Obbligatorio)
-# ==============================================================================
-def genera_pdf_referto(codice_paziente, dati_visita, esito_percorso, note_esami):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=36,
-        leftMargin=36,
-        topMargin=36,
-        bottomMargin=36
-    )
-    story = []
-    styles = getSampleStyleSheet()
-
-    title_style = ParagraphStyle(
-        'DocTitle',
-        parent=styles['Heading1'],
-        fontSize=18,
-        leading=22,
-        textColor=colors.HexColor("#1A365D"),
-        spaceAfter=10
-    )
-    h2_style = ParagraphStyle(
-        'SectionHeader',
-        parent=styles['Heading2'],
-        fontSize=12,
-        leading=16,
-        textColor=colors.HexColor("#2B6CB0"),
-        spaceBefore=10,
-        spaceAfter=5
-    )
-    body_style = ParagraphStyle(
-        'BodyTextCustom',
-        parent=styles['Normal'],
-        fontSize=10,
-        leading=14,
-        textColor=colors.HexColor("#2D3748")
-    )
-    footer_style = ParagraphStyle(
-        'FooterStyleCustom',
-        parent=styles['Normal'],
-        fontSize=7.5,
-        leading=10,
-        textColor=colors.HexColor("#718096"),
-        alignment=1
-    )
-
-    story.append(Paragraph("<b>2GETAPP - CLINICAL DECISION SUPPORT UROLOGIA</b>", title_style))
-    story.append(Paragraph("<i>Report Clinico DSS & Percorso Terapeutico Integrato (Prostata & Vescica)</i>", body_style))
-    story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1A365D"), spaceAfter=15))
-
-    dati_tabella = [
-        [Paragraph("<b>Codice Univoco Paziente:</b>", body_style), Paragraph(codice_paziente, body_style)],
-        [Paragraph("<b>Data Documento:</b>", body_style), Paragraph(datetime.now().strftime("%d/%m/%Y"), body_style)],
-        [Paragraph("<b>Tipo di Visita / Fase:</b>", body_style), Paragraph(dati_visita.get("tipo", "N/D"), body_style)],
-        [Paragraph("<b>Esito / Percorso:</b>", body_style), Paragraph(f"<b>{esito_percorso}</b>", body_style)],
-    ]
-    t_info = Table(dati_tabella, colWidths=[160, 360])
-    t_info.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#F7FAFC")),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#E2E8F0")),
-        ('PADDING', (0,0), (-1,-1), 6),
-    ]))
-    story.append(t_info)
-    story.append(Spacer(1, 15))
-
-    story.append(Paragraph("<b>QUADRO CLINICO E PARAMETRI VALUTATI</b>", h2_style))
-    story.append(Paragraph(dati_visita.get("dettagli", "-"), body_style))
-    story.append(Spacer(1, 15))
-
-    story.append(Paragraph("<b>RACCOMANDAZIONI & PIANO DECISIONALE</b>", h2_style))
-    for rec in note_esami:
-        story.append(Paragraph(f"• {rec}", body_style))
-        story.append(Spacer(1, 4))
-
-    story.append(Spacer(1, 25))
-    story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#CBD5E0"), spaceAfter=10))
-    
-    footer_text = (
-        "Documento prodotto automaticamente dal Sistema di Supporto Decisionale 2gether™ secondo le Linee Guida Urologiche Internazionali e Nazionali.<br/>"
-        "Riferimenti Ufficiali: <b>EAU</b> (European Association of Urology) | <b>AUA</b> (American Urological Association) | "
-        "<b>AIOM</b> (Associazione Italiana di Oncologia Medica) | <b>NCCN</b> (National Comprehensive Cancer Network)"
-    )
-    story.append(Paragraph(footer_text, footer_style))
-
-    doc.build(story)
-    buffer.seek(0)
-    return buffer
 
 # ==============================================================================
 # FUNZIONI SCIENTIFICHE (PROSTATA)
@@ -318,7 +222,7 @@ if organo_selezionato == "🧬 PROSTATA":
         st.markdown("---")
         scelta_trattamento = st.selectbox("Trattamento Concordato / Scelto:", ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia"], key="pros_trattamento") if not necessita_stadiatura else "In attesa di Stadiatura (DMT II)"
 
-        if st.button("💾 Salvataggio & Genera Report PDF (Prostata)", key="pros_btn_save"):
+        if st.button("💾 Salvataggio Dati (Prostata)", key="pros_btn_save"):
             if not nome_p or not cognome_p:
                 st.error("Inserire Nome e Cognome del paziente.")
             else:
@@ -338,17 +242,8 @@ if organo_selezionato == "🧬 PROSTATA":
                 }
                 salva_db_pazienti(st.session_state["db_pazienti"])
                 genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
-                
-                pdf_bytes = genera_pdf_referto(codice_paziente, dati_v, scelta_trattamento, [motivazione_stadiatura, f"Percorso assegnato: {scelta_trattamento}"])
-                st.success(f"Paziente salvato con successo! Codice: `{codice_paziente}`")
-                
-                st.download_button(
-                    label="📄 Scarica Referto PDF Stampabile",
-                    data=pdf_bytes,
-                    file_name=f"Referto_PROSTATA_{codice_paziente}.pdf",
-                    mime="application/pdf",
-                    key="pros_dl"
-                )
+                st.success(f"Paziente salvato con successo nel database! Codice Univoco: `{codice_paziente}`")
+                st.info(f"📋 **Indicazioni Cliniche:** {motivazione_stadiatura}")
 
     elif modalita == "2. Seconda Visita / DMT: Referto Stadiatura & Decisione":
         st.subheader("📑 Seconda Visita / Inquadramento DMT")
@@ -384,8 +279,10 @@ if organo_selezionato == "🧬 PROSTATA":
                 res_fu = calcola_timing_controllo("Radioterapia", {"psa": psa_attuale, "psa_nadir": 0.1, "mesi_post_rt": 12})
 
             st.info(f"**Indicazioni:** {res_fu['rec_psa']}")
+            if "alert" in res_fu:
+                st.warning(res_fu["alert"])
 
-            if st.button("💾 Salvataggio Visita & Genera PDF Controllo", key="pros_fu_save"):
+            if st.button("💾 Salva Visita di Controllo", key="pros_fu_save"):
                 paziente["ultimo_psa"] = psa_attuale
                 paziente["data_ultimo_psa"] = str(data_psa_attuale)
                 
@@ -396,22 +293,10 @@ if organo_selezionato == "🧬 PROSTATA":
                 }
                 paziente["visite"].append(dati_v)
                 salva_db_pazienti(st.session_state["db_pazienti"])
-                
-                note_pdf = [res_fu.get("rec_psa"), res_fu.get("rec_rmn"), res_fu.get("rec_bx"), res_fu.get("rec_imaging")]
-                note_pdf = [n for n in note_pdf if n]
-                
-                pdf_bytes = genera_pdf_referto(codice_search, dati_v, percorso_attuale, note_pdf)
-                st.success("Controllo registrato!")
-                st.download_button(
-                    label="📄 Scarica Referto Follow-up PDF",
-                    data=pdf_bytes,
-                    file_name=f"FollowUp_PROSTATA_{codice_search}.pdf",
-                    mime="application/pdf",
-                    key="pros_fu_dl"
-                )
+                st.success("Controllo registrato correttamente nel database!")
 
 # ==============================================================================
-# MODULO 2: VESCICA & UTUC (Integrato con correzione tasti ed esecuzione protetta)
+# MODULO 2: VESCICA & UTUC
 # ==============================================================================
 elif organo_selezionato == "💧 VESCICA & UTUC":
     st.title("💧 Carcinoma Uroteliale Vescicale & UTUC")
@@ -427,9 +312,6 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
         key="vescica_fase_radio"
     )
 
-    # --------------------------------------------------------------------------
-    # FASE 1: PRIMA CISTOSCOPIA
-    # --------------------------------------------------------------------------
     if fase_vescica == "1. Prima Cistoscopia & Diagnosi Iniziale":
         st.subheader("📋 1. Anagrafica e Primo Snodo Diagnostico")
         
@@ -503,7 +385,7 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                 key="racc_neg"
             )
 
-            if st.button("💾 Salvataggio & Genera PDF Cistoscopia Negativa", key="btn_save_neg"):
+            if st.button("💾 Salva Cistoscopia Negativa", key="btn_save_neg"):
                 if not nome_p or not cognome_p:
                     st.error("Inserire Nome e Cognome del paziente.")
                 else:
@@ -520,21 +402,7 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                     }
                     salva_db_pazienti(st.session_state["db_pazienti"])
                     genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
-
-                    pdf_bytes = genera_pdf_referto(
-                        codice_paziente,
-                        dati_v,
-                        "CISTOSCOPIA NEGATIVA",
-                        [f"Raccomandazione: {raccomandazione_neg}"]
-                    )
-                    st.success(f"Referto stampato! Il percorso del paziente `{codice_paziente}` termina qui.")
-                    st.download_button(
-                        label="📄 Scarica Referto PDF Cistoscopia Negativa",
-                        data=pdf_bytes,
-                        file_name=f"Referto_Cistoscopia_NEG_{codice_paziente}.pdf",
-                        mime="application/pdf",
-                        key="dl_neg"
-                    )
+                    st.success(f"Referto salvato! Il percorso del paziente `{codice_paziente}` è stato registrato.")
 
         else:
             st.error("⚠️ **CISTOSCOPIA POSITIVA**: Indicazione chirurgica a TURBT.")
@@ -576,16 +444,8 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                 key="snodo_turbt"
             )
 
-            note_guida = [f"Indicazione Chirurgica: {snodo_turbt}"]
             if "Sessile" in aspetto_lesione or "> 3 cm" in dimensione_stimata:
                 st.warning("⚠️ **RISCHIO INVASIONE MUSCOLARE (≥pT2)**: Consigliata mpRMN Vescicale Pre-operatoria (VI-RADS) prima della TURBT.")
-                if "mpRMN" not in snodo_turbt:
-                    note_guida.append("Sospetta infiltrazione muscolare: raccomandata mpRMN Vescicale (VI-RADS) pre-TURBT.")
-
-            if sesso == "Maschio":
-                note_guida.append("Uomo: Valutare uretra prostatica durante TURBT.")
-            else:
-                note_guida.append("Donna: Valutare parete vescicale anteriore e piano vaginale.")
 
             template_positivo = (
                 f"L'esame cistoscopico evidenzia in corrispondenza della {sede_lesione.lower()} neoformazione {aspetto_lesione.lower()} di circa {dimensione_stimata}.\n"
@@ -594,7 +454,7 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
 
             referto_testo_pos = st.text_area("Testo del Referto Cistoscopico Positivo:", value=template_positivo, height=160, key="testo_positivo")
 
-            if st.button("💾 Salvataggio & Genera PDF Cistoscopia Positiva (TURBT)", key="btn_save_pos"):
+            if st.button("💾 Salva Cistoscopia Positiva (TURBT)", key="btn_save_pos"):
                 if not nome_p or not cognome_p:
                     st.error("Inserire Nome e Cognome del paziente.")
                 else:
@@ -614,25 +474,8 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                     }
                     salva_db_pazienti(st.session_state["db_pazienti"])
                     genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
-
-                    pdf_bytes = genera_pdf_referto(
-                        codice_paziente,
-                        dati_v,
-                        "CISTOSCOPIA POSITIVA (INDICAZIONE TURBT)",
-                        note_guida
-                    )
                     st.success(f"Referto salvato con indicazione a TURBT! Codice Paziente: `{codice_paziente}`.")
-                    st.download_button(
-                        label="📄 Scarica Referto PDF Cistoscopia Positiva (TURBT)",
-                        data=pdf_bytes,
-                        file_name=f"Referto_Cistoscopia_TURBT_{codice_paziente}.pdf",
-                        mime="application/pdf",
-                        key="dl_pos"
-                    )
 
-    # --------------------------------------------------------------------------
-    # FASE 2: SECONDA VISITA POST-TURBT
-    # --------------------------------------------------------------------------
     elif fase_vescica == "2. Seconda Visita Post-TURBT (Istologia & Re-TURB)":
         st.subheader("📑 Seconda Visita Post-TURBT: Valutazione Istologica e Decisionale")
 
@@ -701,18 +544,17 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
         )
 
         if "VI-RADS ≤ 2" in rmn_eseguita:
-            st.success("✅ **RMN CERTIFICA MALATTIA NON MUSCOLO-INVASIVA (VI-RADS ≤ 2)**: L'esame RMN conferma l'assenza di invasione della tonaca muscolare.")
+            st.success("✅ **RMN CERTIFICA MALATTIA NON MUSCOLO-INVASIVA (VI-RADS ≤ 2)**")
         elif "VI-RADS ≥ 3" in rmn_eseguita:
-            st.warning("⚠️ **RMN SOSTENE INFILTRAZIONE (VI-RADS ≥ 3)**: Correlare attentamente con l'esame istologico.")
+            st.warning("⚠️ **RMN SOSPESA INFILTRAZIONE (VI-RADS ≥ 3)**")
 
         st.markdown("---")
         st.subheader("⚖️ 3. Indicazioni Cliniche & Avviso Re-TURB")
 
-        indicazioni_visita = []
         richiede_returb = False
 
         if st_pT == "-- Seleziona pT --" or st_grado == "-- Seleziona Grado --":
-            st.error("⛔ **ATTENZIONE**: I campi **pT** e **Grado (LG/HG)** sono **OBBLIGATORI** per procedere con il DSS e la stampa del referto.")
+            st.error("⛔ **ATTENZIONE**: I campi **pT** e **Grado (LG/HG)** sono **OBBLIGATORI** per procedere con il DSS.")
         else:
             if "pT1" in st_pT:
                 richiede_returb = True
@@ -725,26 +567,21 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                 motivo_returb = "Resezione primaria incompleta."
 
             if richiede_returb:
-                st.error(f"⚠️ **INDICAZIONE A RE-TURB (Second Look)**\n\n**Motivazione:** {motivo_returb}\n\n👉 **INVITO CLINICO:** Discutere l'indicazione alla Re-TURB direttamente con il paziente (benefici stadiativi e terapeutici).")
-                indicazioni_visita.append(f"INDIRIZZO CLINICO: Eventuale Re-TURB indicata e discussa con il paziente ({motivo_returb}).")
+                st.error(f"⚠️ **INDICAZIONE A RE-TURB (Second Look)**\n\n**Motivazione:** {motivo_returb}")
             else:
-                st.info("ℹ️ Re-TURB non routinariamente indicata. Procedere con terapia endovescicale (BCG/Chemioterapia) o sorveglianza in base alla classe di rischio.")
-                indicazioni_visita.append("Re-TURB non necessaria. Procedere con protocollo di sorveglianza/instillazioni.")
-
-            if "VI-RADS ≤ 2" in rmn_eseguita:
-                indicazioni_visita.append("RMN pre-operatoria certifica lesione non muscolo-invasiva (VI-RADS ≤ 2).")
+                st.info("ℹ️ Re-TURB non routinariamente indicata. Procedere con terapia endovescicale o sorveglianza.")
 
             testo_post_turb = (
                 f"VISITA POST-TURBT - VALUTAZIONE ISTOLOGICA\n"
                 f"- Istotipo e Stadio: {st_pT}, {st_grado}\n"
                 f"- Valutazione Tonaca Muscolare: {presenza_muscolo}\n"
                 f"- RMN Vescicale: {rmn_eseguita}\n"
-                f"- DECISIONE CLINICA: " + ("Inviata/Discussa eventuale Re-TURB con il paziente." if richiede_returb else "Programmata gestione/follow-up standard.")
+                f"- DECISIONE CLINICA: " + ("Eventuale Re-TURB indicata." if richiede_returb else "Gestione standard.")
             )
 
             referto_post = st.text_area("Testo del Referto II Visita Post-TURBT:", value=testo_post_turb, height=160, key="vescica_testo_post")
 
-            if st.button("💾 Salvataggio & Genera PDF II Visita", key="vescica_btn_save_ii"):
+            if st.button("💾 Salva II Visita Post-TURBT", key="vescica_btn_save_ii"):
                 if not codice_paziente:
                     st.error("Inserire un codice paziente valido.")
                 else:
@@ -766,21 +603,7 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                         "re_turb_indicata": richiede_returb
                     }
                     salva_db_pazienti(st.session_state["db_pazienti"])
-
-                    pdf_bytes = genera_pdf_referto(
-                        codice_paziente,
-                        dati_v,
-                        f"Istologia: {st_pT} - {st_grado}",
-                        indicazioni_visita
-                    )
                     st.success(f"II Visita registrata con successo per il paziente `{codice_paziente}`!")
-                    st.download_button(
-                        label="📄 Scarica Referto PDF II Visita",
-                        data=pdf_bytes,
-                        file_name=f"Referto_PostTURBT_{codice_paziente}.pdf",
-                        mime="application/pdf",
-                        key="vescica_dl_ii"
-                    )
 
     elif fase_vescica == "3. MIBC (≥T2) & Criteri di Elegibilità Chemioterapia":
         st.subheader("🩺 3. Carcinoma Muscolo-Invasivo (MIBC ≥ T2)")
