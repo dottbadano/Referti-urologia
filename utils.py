@@ -8,6 +8,11 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from io import BytesIO
 
+ELENCO_MESI = [
+    "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+    "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
+]
+
 def carica_db_pazienti():
     """Carica il database dei pazienti dal file JSON."""
     if os.path.exists("registro_pazienti.json"):
