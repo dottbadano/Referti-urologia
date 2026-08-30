@@ -407,7 +407,7 @@ if organo_selezionato == "🧬 PROSTATA":
                 )
 
 # ==============================================================================
-# MODULO 2: VESCICA & UTUC (Completo di tutti gli snodi e footer standardizzato)
+# MODULO 2: VESCICA & UTUC (Integrato con correzione tasti e inserimento libero)
 # ==============================================================================
 elif organo_selezionato == "💧 VESCICA & UTUC":
     st.title("💧 Carcinoma Uroteliale Vescicale & UTUC")
@@ -423,18 +423,18 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
     )
 
     # --------------------------------------------------------------------------
-    # FASE 1: PRIMA CISTOSCOPIA
+    # FASE 1: PRIMA CISTOSCOPIA (Con chiavi univoche per evitare blocchi)
     # --------------------------------------------------------------------------
     if fase_vescica == "1. Prima Cistoscopia & Diagnosi Iniziale":
         st.subheader("📋 1. Anagrafica e Primo Snodo Diagnostico")
         
         col_a, col_b, col_c = st.columns(3)
         with col_a:
-            nome_p = st.text_input("Nome Paziente")
-            data_nascita_p = st.date_input("Data di Nascita", datetime(1960, 1, 1))
+            nome_p = st.text_input("Nome Paziente", key="vescica_nome")
+            data_nascita_p = st.date_input("Data di Nascita", datetime(1960, 1, 1), key="vescica_nascita")
         with col_b:
-            cognome_p = st.text_input("Cognome Paziente")
-            sesso = st.selectbox("Sesso del Paziente:", ["Maschio", "Femmina"])
+            cognome_p = st.text_input("Cognome Paziente", key="vescica_cognome")
+            sesso = st.selectbox("Sesso del Paziente:", ["Maschio", "Femmina"], key="vescica_sesso")
         with col_c:
             hash_id = hashlib.md5(f"{nome_p}{cognome_p}{data_nascita_p}".encode()).hexdigest()[:6]
             codice_paziente = f"2GET-VESC-{hash_id.upper()}"
@@ -454,7 +454,8 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                     "Reperto Incidentale Ecografico (Sospetta formazione)",
                     "Citologia Urinaria Positiva / Sospetta (Atypical/HGUC)",
                     "Sorveglianza / Rischio Professionale (Fumo, Amine Aromatiche)"
-                ]
+                ],
+                key="vescica_motivo"
             )
         with col_d2:
             esito_cistoscopia = st.selectbox(
@@ -462,7 +463,8 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                 [
                     "NEGATIVA (Assenza di neoformazioni sospette)",
                     "POSITIVA (Riscontro di neoformazione/i o aree sospette)"
-                ]
+                ],
+                key="vescica_esito"
             )
 
         if "NEGATIVA" in esito_cistoscopia:
@@ -484,7 +486,7 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                     "- CONCLUSIONI: Cistoscopia negativa per lesioni uroteliali evolutive."
                 )
 
-            referto_testo = st.text_area("Testo del Referto Cistoscopico (Modificabile):", value=template_negativo, height=180)
+            referto_testo = st.text_area("Testo del Referto Cistoscopico (Modificabile):", value=template_negativo, height=180, key="testo_negativo")
             raccomandazione_neg = st.selectbox(
                 "Indicazione / Follow-up:",
                 [
@@ -492,10 +494,11 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                     "Esecuzione Citologia Urinaria su 3 campioni di controllo",
                     "Rivalutazione ecografica a 6-12 mesi",
                     "Approfondimento vie urinarie superiori (TC Urografia) per ematuria non spiegata"
-                ]
+                ],
+                key="racc_neg"
             )
 
-            if st.button("💾 Salvataggio & Genera PDF Cistoscopia Negativa"):
+            if st.button("💾 Salvataggio & Genera PDF Cistoscopia Negativa", key="btn_save_neg"):
                 if not nome_p or not cognome_p:
                     st.error("Inserire Nome e Cognome del paziente.")
                 else:
@@ -524,7 +527,8 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                         label="📄 Scarica Referto PDF Cistoscopia Negativa",
                         data=pdf_bytes,
                         file_name=f"Referto_Cistoscopia_NEG_{codice_paziente}.pdf",
-                        mime="application/pdf"
+                        mime="application/pdf",
+                        key="dl_neg"
                     )
 
         else:
@@ -539,17 +543,20 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                         "Sessile / Solida / Piatta (Apparentemente Infiltrante)",
                         "Area Eritematosa / Vellutata (Sospetto CIS)",
                         "Lesioni Multiple Papillari Multifocali"
-                    ]
+                    ],
+                    key="morfologia_lesione"
                 )
             with col_p2:
                 sede_lesione = st.selectbox(
                     "Sede Lesione:",
-                    ["Parete Laterale Destra", "Parete Laterale Sinistra", "Parete Posteriore", "Fondo / Cupola", "Trigono Vescicale", "Collo Vescicale / Meati", "Uretra Prostatica (Uomo)"]
+                    ["Parete Laterale Destra", "Parete Laterale Sinistra", "Parete Posteriore", "Fondo / Cupola", "Trigono Vescicale", "Collo Vescicale / Meati", "Uretra Prostatica (Uomo)"],
+                    key="sede_lesione"
                 )
             with col_p3:
                 dimensione_stimata = st.selectbox(
                     "Dimensione Stimata:",
-                    ["< 1 cm", "1 - 3 cm", "> 3 cm (Grande massa vescicale)"]
+                    ["< 1 cm", "1 - 3 cm", "> 3 cm (Grande massa vescicale)"],
+                    key="dim_lesione"
                 )
 
             st.markdown("---")
@@ -560,7 +567,8 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                     "TURBT + mpRMN Vescicale Pre-operatoria (Score VI-RADS)",
                     "TURBT + Biopsie Prostatiche/Uretrali Mappate (Uomo)",
                     "TURBT + Biopsie Vescicali Multiple (Sospetto CIS)"
-                ]
+                ],
+                key="snodo_turbt"
             )
 
             note_guida = [f"Indicazione Chirurgica: {snodo_turbt}"]
@@ -579,9 +587,9 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                 f"- RACCOMANDAZIONE: Indicazione ad intervento di TURBT (Resezione Transuretrale di Tumore Vescicale)."
             )
 
-            referto_testo_pos = st.text_area("Testo del Referto Cistoscopico Positivo:", value=template_positivo, height=160)
+            referto_testo_pos = st.text_area("Testo del Referto Cistoscopico Positivo:", value=template_positivo, height=160, key="testo_positivo")
 
-            if st.button("💾 Salvataggio & Genera PDF Cistoscopia Positiva (TURBT)"):
+            if st.button("💾 Salvataggio & Genera PDF Cistoscopia Positiva (TURBT)", key="btn_save_pos"):
                 if not nome_p or not cognome_p:
                     st.error("Inserire Nome e Cognome del paziente.")
                 else:
@@ -613,7 +621,8 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                         label="📄 Scarica Referto PDF Cistoscopia Positiva (TURBT)",
                         data=pdf_bytes,
                         file_name=f"Referto_Cistoscopia_TURBT_{codice_paziente}.pdf",
-                        mime="application/pdf"
+                        mime="application/pdf",
+                        key="dl_pos"
                     )
 
     # --------------------------------------------------------------------------
@@ -624,7 +633,7 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
 
         codici_esistenti = list(st.session_state["db_pazienti"].keys())
         if codici_esistenti:
-            cod_sel = st.selectbox("Seleziona Codice Paziente esistente:", ["-- Seleziona o Inserisci nuovo --"] + codici_esistenti)
+            cod_sel = st.selectbox("Seleziona Codice Paziente esistente:", ["-- Seleziona o Inserisci nuovo --"] + codici_esistenti, key="vescica_sel_esistente")
         else:
             cod_sel = "-- Seleziona o Inserisci nuovo --"
 
@@ -632,7 +641,7 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
             codice_paziente = cod_sel
             st.info(f"Paziente Selezionato: `{codice_paziente}`")
         else:
-            codice_paziente = st.text_input("Inserisci Codice Univoco Paziente (es. 2GET-VESC-XXXXXX):")
+            codice_paziente = st.text_input("Inserisci Codice Univoco Paziente (es. 2GET-VESC-XXXXXX):", key="vescica_manual_code")
 
         st.markdown("---")
         st.subheader("🔬 1. Esame Istologico Post-TURBT (CAMPI OBBLIGATORI)")
@@ -648,7 +657,8 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                     "pT1 (Invasione della Lamina Propria)",
                     "pTis (Carcinoma in Situ isolato o associato)",
                     "≥ pT2 (Invasione della Muscolare Propria - MIBC)"
-                ]
+                ],
+                key="vescica_st_pt"
             )
 
         with col_ist2:
@@ -658,7 +668,8 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                     "-- Seleziona Grado --",
                     "LG (Low Grade / Basso Grado)",
                     "HG (High Grade / Alto Grado)"
-                ]
+                ],
+                key="vescica_st_grado"
             )
 
         with col_ist3:
@@ -668,7 +679,8 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                     "Presente e Indenne (Muscolare Propria Negativa)",
                     "Assente (Non valutabile la muscolare)",
                     "Infiltrata (pT2)"
-                ]
+                ],
+                key="vescica_muscolo"
             )
 
         st.markdown("---")
@@ -677,7 +689,8 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
         rmn_eseguita = st.radio(
             "RMN Vescicale Eseguita?",
             ["No / Non disponibile", "Sì - RMN Certifica Malattia Superficiale (VI-RADS ≤ 2)", "Sì - RMN Sospetta Infiltrazione Muscolare (VI-RADS ≥ 3)"],
-            horizontal=True
+            horizontal=True,
+            key="vescica_rmn_eseguita"
         )
 
         if "VI-RADS ≤ 2" in rmn_eseguita:
@@ -722,9 +735,9 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                 f"- DECISIONE CLINICA: " + ("Inviata/Discussa eventuale Re-TURB con il paziente." if richiede_returb else "Programmata gestione/follow-up standard.")
             )
 
-            referto_post = st.text_area("Testo del Referto II Visita Post-TURBT:", value=testo_post_turb, height=160)
+            referto_post = st.text_area("Testo del Referto II Visita Post-TURBT:", value=testo_post_turb, height=160, key="vescica_testo_post")
 
-            if st.button("💾 Salvataggio & Genera PDF II Visita"):
+            if st.button("💾 Salvataggio & Genera PDF II Visita", key="vescica_btn_save_ii"):
                 if not codice_paziente:
                     st.error("Inserire un codice paziente valido.")
                 else:
@@ -755,7 +768,8 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
                         label="📄 Scarica Referto PDF II Visita",
                         data=pdf_bytes,
                         file_name=f"Referto_PostTURBT_{codice_paziente}.pdf",
-                        mime="application/pdf"
+                        mime="application/pdf",
+                        key="vescica_dl_ii"
                     )
 
     elif fase_vescica == "3. MIBC (≥T2) & Criteri di Elegibilità Chemioterapia":
