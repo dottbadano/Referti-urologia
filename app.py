@@ -3,6 +3,26 @@ import streamlit as st
 # Configurazione pagina Streamlit
 st.set_page_config(page_title="2gether", layout="wide")
 
+# CSS per rendere l'intera riga del checkbox (testo compreso) interamente cliccabile
+st.markdown("""
+<style>
+div.stCheckbox {
+    cursor: pointer;
+}
+div.stCheckbox label {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    user-select: none;
+}
+div.stCheckbox label p {
+    cursor: pointer;
+    flex-grow: 1;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Inizializzazione del Database Pazienti
 if "db_pazienti" not in st.session_state:
     from utils import carica_db_pazienti
