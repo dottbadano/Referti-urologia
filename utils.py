@@ -18,6 +18,16 @@ def carica_db_pazienti():
             return {}
     return {}
 
+def salva_db_pazienti(registro):
+    """Salva il database dei pazienti aggiornato nel file JSON."""
+    try:
+        with open("registro_pazienti.json", "w", encoding="utf-8") as f:
+            json.dump(registro, f, ensure_ascii=False, indent=4)
+        return True
+    except Exception as e:
+        print(f"Errore nel salvataggio del database: {e}")
+        return False
+
 def genera_codice_univoco(nome, cognome):
     """Genera un codice univoco basato sulle iniziali e numeri casuali."""
     n_init = nome[:2].upper() if len(nome) >= 2 else nome.upper()
@@ -36,8 +46,7 @@ def genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_univoco):
         "ultimo_aggiornamento": str(datetime.today().date())
     }
     
-    with open("registro_pazienti.json", "w", encoding="utf-8") as f:
-        json.dump(registro, f, ensure_ascii=False, indent=4)
+    salva_db_pazienti(registro)
 
 def render_anamnesi_generale(prefix="gen"):
     """Renderizza l'inquadramento clinico generale con campi facoltativi."""
