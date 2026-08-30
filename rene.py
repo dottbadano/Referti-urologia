@@ -6,7 +6,8 @@ from utils import (
     genera_o_aggiorna_registro, 
     genera_pdf_referto, 
     genera_codice_univoco, 
-    render_anamnesi_generale
+    render_anamnesi_generale,
+    formatta_anamnesi_per_pdf
 )
 
 def render_modulo():
@@ -57,8 +58,9 @@ def render_modulo():
 
     st.divider()
 
-    # Anamnesi Generale Condivisa
-    anamnesi = render_anamnesi_generale()
+    # Anamnesi Generale Condivisa con prefisso univoco per evitare collisioni di chiavi
+    anamnesi = render_anamnesi_generale(prefix="rene")
+    anamnesi_ordinata_pdf = formatta_anamnesi_per_pdf(anamnesi)
 
     st.divider()
 
@@ -117,14 +119,6 @@ def render_modulo():
         raccomandazioni.append("Segnalata riduzione del filtrato glomerulare (eGFR < 60): consigliata valutazione nefrologica.")
     if imaging_rene == "Litiasi Renale (Calcolosi)":
         raccomandazioni.append("Valutazione per eventuale trattamento endoscopico o litotrissia.")
-    
-    # Integrazione dati anamnestici generali
-    if anamnesi["ipertensione"]:
-        raccomandazioni.append("Nota annessa: Paziente iperteso in anamnesi.")
-    if anamnesi["diabete"] != "No":
-        raccomandazioni.append(f"Nota annessa: Diabete mellito ({anamnesi['diabete']}).")
-    if anamnesi["fumo"] != "Non fumatore":
-        raccomandazioni.append(f"Nota annessa: Abitudine tabagica generale ({anamnesi['fumo']}).")
 
     raccomandazioni.append(f"Percorso impostato: {percorso}")
 
@@ -133,10 +127,13 @@ def render_modulo():
         if nome and cognome and codice_univoco:
             genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_univoco)
             
+            blocco_anamnesi_str = f"\nAnamnesi Generale:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
+            note_aggiuntive_str = f"\nNote Cliniche: {note_cliniche}" if note_cliniche.strip() else ""
+            
             dettagli_visita = {
                 "data": str(datetime.today().date()),
                 "tipo": "Visita Urologica - Modulo Rene",
-                "dettagli": f"Creatinina: {creatinina} mg/dL | eGFR: {egfr} mL/min | Ematuria: {ematuria} | Imaging: {imaging_rene} | Proteinuria: {proteinuria} | Anamnesi gen: Ipertensione={anamnesi['ipertensione']}, Diabete={anamnesi['diabete']}, Fumo={anamnesi['fumo']}. Note: {note_cliniche}"
+                "dettagli": f"Parametri Renali:\n• Creatinina: {creatinina} mg/dL\n• eGFR: {egfr} mL/min\n• Ematuria: {ematuria}\n• Imaging: {imaging_rene}\n• Proteinuria: {proteinuria}{blocco_anamnesi_str}{note_aggiuntive_str}"
             }
             
             pdf_bytes = genera_pdf_referto(
