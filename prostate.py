@@ -10,6 +10,7 @@ from utils import (
     genera_pdf_referto, 
     genera_codice_univoco, 
     render_anamnesi_generale, 
+    formatta_anamnesi_per_pdf,
     ELENCO_MESI
 )
 
@@ -112,7 +113,6 @@ def render_modulo():
     if modalita == "1. Prima Visita: Inquadramento Bioptico & Rischio":
         st.subheader("📋 Inserimento Anagrafica Paziente")
         
-        # Gestione Registro ed Espansore Anagrafica Integrato
         registro_esistente = {}
         if os.path.exists("registro_pazienti.json"):
             try:
@@ -154,8 +154,9 @@ def render_modulo():
 
         st.divider()
 
-        # Anamnesi Generale Condivisa
-        anamnesi = render_anamnesi_generale()
+        # Anamnesi Generale Condivisa con prefisso univoco
+        anamnesi = render_anamnesi_generale(prefix="prostata")
+        anamnesi_ordinata_pdf = formatta_anamnesi_per_pdf(anamnesi)
 
         st.divider()
         st.subheader("🔬 Dati Bioptici, Clinici e Imaging Iniziale (mpRMN)")
@@ -202,13 +203,9 @@ def render_modulo():
             if not nome_p or not cognome_p or not codice_paziente:
                 st.error("Inserire Nome, Cognome e Codice Univoco del paziente.")
             else:
-                dettagli_str = f"ISUP {isup_num} | Gleason Terziario: {gleason_terziario} | PSA: {psa_basale} ({mese_psa_b} {anno_psa_b}) | {ct_stage} | Rischio: {gruppo_rischio}"
-                if anamnesi["ipertensione"]:
-                    dettagli_str += " | Ipertensione: Sì"
-                if anamnesi["diabete"] != "No":
-                    dettagli_str += f" | Diabete: {anamnesi['diabete']}"
-                if anamnesi["fumo"] != "Non fumatore":
-                    dettagli_str += f" | Fumo: {anamnesi['fumo']}"
+                blocco_anamnesi_str = f"\nAnamnesi Generale:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
+                
+                dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_num}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}{blocco_anamnesi_str}"
 
                 dati_v = {
                     "data": str(datetime.today().date()),
@@ -232,12 +229,6 @@ def render_modulo():
                 genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
                 
                 note_pdf_list = [motivazione_stadiatura, f"Percorso assegnato: {scelta_trattamento}"]
-                if anamnesi["ipertensione"]:
-                    note_pdf_list.append("Nota annessa: Paziente iperteso in anamnesi.")
-                if anamnesi["diabete"] != "No":
-                    note_pdf_list.append(f"Nota annessa: Diabete mellito ({anamnesi['diabete']}).")
-                if anamnesi["fumo"] != "Non fumatore":
-                    note_pdf_list.append(f"Nota annessa: Abitudine tabagica ({anamnesi['fumo']}).")
 
                 pdf_bytes = genera_pdf_referto(codice_paziente, dati_v, scelta_trattamento, note_pdf_list, nome=nome_p, cognome=cognome_p)
                 st.success(f"Paziente salvato con successo! Codice: `{codice_paziente}`")
@@ -294,7 +285,7 @@ def render_modulo():
                     "dettagli": f"PSA: {psa_attuale:.2f} ({mese_psa_a} {anno_psa_a}) | PSADT: {psadt_calcolato} mesi"
                 }
                 paziente["visite"].append(dati_v)
-                salva_db_pazienti(st.session_state["db_pazienti"])
+                salva_db_pazienti(state_pazienti=st.session_state["db_pazienti"] if "db_pazienti" in st.session_state else {})
                 
                 note_pdf = [res_fu.get("rec_psa"), res_fu.get("rec_rmn"), res_fu.get("rec_bx"), res_fu.get("rec_imaging")]
                 note_pdf = [n for n in note_pdf if n]
