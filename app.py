@@ -636,7 +636,6 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
     elif fase_vescica == "2. Seconda Visita Post-TURBT (Istologia & Re-TURB)":
         st.subheader("📑 Seconda Visita Post-TURBT: Valutazione Istologica e Decisionale")
 
-        # Gestione sicura dei codici esistenti per evitare crash se il dizionario è vuoto
         db_pazienti_memoria = st.session_state.get("db_pazienti", {})
         codici_esistenti = list(db_pazienti_memoria.keys()) if isinstance(db_pazienti_memoria, dict) else []
         
