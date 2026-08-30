@@ -74,9 +74,11 @@ def calcola_psadt(psa_precedente, data_precedente_str, psa_attuale, data_attuale
 
 def calcola_gruppo_rischio_eau(isup_num, psa, ct_stage, gleason_terziario):
     is_terziario_alto = gleason_terziario in ["Pattern 5 Terziario", "Pattern 4 Terziario"]
+    
+    # Correzione EAU: cT3a rientra correttamente nell'Alto / Molto Alto Rischio
     if isup_num >= 4 or psa > 20 or ct_stage in ["cT3a", "cT3b", "cT4"] or is_terziario_alto:
         return ("Alto / Molto Alto Rischio", True, "Indicata Stadiatura Sistemica (PET/TC PSMA oppure TC + Scintigrafia).")
-    elif isup_num in [2, 3] or (10 <= psa <= 20) or ct_stage == "cT2b-cT2c":
+    elif isup_num in [2, 3] or (10 <= psa <= 20) or ct_stage in ["cT2b", "cT2c"]:
         if isup_num == 3 or (isup_num == 2 and psa > 10):
             return ("Rischio Intermedio Sfavorevole", True, "Indicata Stadiatura Sistemica (Preferibile PET/TC PSMA).")
         else:
@@ -557,7 +559,6 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
         if st_pT == "-- Seleziona pT --" or st_grado == "-- Seleziona Grado --":
             st.error("⛔ **ATTENZIONE**: I campi **pT** e **Grado (LG/HG)** sono **OBBLIGATORI** per procedere con il DSS.")
         else:
-            # Controllo MIBC rigoroso (basato su pT2, muscolo infiltrato o RMN con VI-RADS alto)
             if "≥ pT2" in st_pT or "Infiltrata" in presenza_muscolo or "VI-RADS ≥ 3" in rmn_eseguita:
                 is_mibc = True
                 motivo_mibc = "Malattia Muscolo-Invasiva (MIBC) confermata istologicamente o fortemente sospetta all'imaging (VI-RADS ≥ 3)."
@@ -565,7 +566,6 @@ elif organo_selezionato == "💧 VESCICA & UTUC":
             if is_mibc:
                 st.error(f"🚨 **DIAGNOSI DI MALATTIA MUSCOLO-INVASIVA (MIBC / ≥ pT2)**\n\n**Indicazione:** {motivo_mibc}\n\n*Nota: Escluso il percorso superficiale / instillazioni. Richiesta stadiatura globale e valutazione per trattamento radicale.*")
             else:
-                # Gestione pT1 con muscolo assente ma RMN protettiva (VI-RADS <= 2)
                 if "pT1" in st_pT:
                     if "Assente" in presenza_muscolo:
                         if "VI-RADS ≤ 2" in rmn_eseguita:
