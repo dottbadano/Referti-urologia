@@ -6,13 +6,13 @@ from utils import (
     genera_o_aggiorna_registro, 
     genera_pdf_referto, 
     genera_codice_univoco, 
-    render_anamnesi_generale
+    render_anamnesi_generale,
+    formatta_anamnesi_per_pdf
 )
 
 def render_modulo():
     st.subheader("🔶 Modulo Fegato - Decision Support System")
     
-    # Anagrafica Paziente con ricerca o inserimento nuovo
     with st.expander("👤 Anagrafica Paziente", expanded=True):
         registro_esistente = {}
         if os.path.exists("registro_pazienti.json"):
@@ -57,12 +57,12 @@ def render_modulo():
 
     st.divider()
 
-    # Anamnesi Generale Condivisa
-    anamnesi = render_anamnesi_generale()
+    # Anamnesi Generale Condivisa con prefisso univoco
+    anamnesi = render_anamnesi_generale(prefix="fegato")
+    anamnesi_ordinata_pdf = formatta_anamnesi_per_pdf(anamnesi)
 
     st.divider()
 
-    # Parametri Clinici Fegato
     st.markdown("### 📋 Parametri Clinici e Valutazione Epatologica")
     
     col_a, col_b = st.columns(2)
@@ -105,7 +105,6 @@ def render_modulo():
 
     st.divider()
 
-    # Percorso Clinico e Raccomandazioni
     st.markdown("### 🧭 Percorso Clinico e Raccomandazioni")
     
     percorso = st.selectbox(
@@ -127,25 +126,18 @@ def render_modulo():
     elif imaging_fegato == "Steatosi epatica (Fegato grasso / NAFLD/MASLD)":
         raccomandazioni.append("Consigliata modificazione dello stile di vita, calo ponderale e controllo dei fattori di rischio metabolici.")
     
-    # Integrazione dati anamnestici generali
-    if anamnesi["ipertensione"]:
-        raccomandazioni.append("Nota annessa: Paziente iperteso in anamnesi.")
-    if anamnesi["diabete"] != "No":
-        raccomandazioni.append(f"Nota annessa: Diabete mellito ({anamnesi['diabete']}).")
-    if anamnesi["fumo"] != "Non fumatore":
-        raccomandazioni.append(f"Nota annessa: Abitudine tabagica ({anamnesi['fumo']}).")
-
     raccomandazioni.append(f"Percorso impostato: {percorso}")
 
-    # Generazione Referto PDF
     if st.button("Genera Referto PDF Fegato", type="primary", key="btn_pdf_fegato"):
         if nome and cognome and codice_univoco:
             genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_univoco)
             
+            blocco_anamnesi_str = f"\nAnamnesi Generale:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
+            
             dettagli_visita = {
                 "data": str(datetime.today().date()),
                 "tipo": "Visita Epatologica - Modulo Fegato",
-                "dettagli": f"Sintomi: {sintomi_epatica} | Imaging: {imaging_fegato} | Esami: {esami_ematici} | Profilo: {profilo_virale}. Anamnesi gen: Ipertensione={anamnesi['ipertensione']}, Diabete={anamnesi['diabete']}, Fumo={anamnesi['fumo']}. Note: {note_cliniche}"
+                "dettagli": f"Parametri Epatologici:\n• Sintomi: {sintomi_epatica}\n• Imaging: {imaging_fegato}\n• Esami Ematici: {esami_ematici}\n• Profilo Virale/Metabolico: {profilo_virale}{blocco_anamnesi_str}\n\nNote Cliniche:\n{note_cliniche if note_cliniche else 'Nessuna nota aggiuntiva.'}"
             }
             
             pdf_bytes = genera_pdf_referto(
