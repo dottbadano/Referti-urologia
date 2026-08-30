@@ -272,19 +272,31 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
     c = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
     
-    # Intestazione
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(50, height - 50, "Decision Support System - Referto Clinico")
+    # Intestazione grafica con brand 2gether
+    c.setFillColorRGB(0.8, 0, 0) # Rosso
+    c.setFont("Helvetica-Bold", 18)
+    c.drawString(50, height - 45, "2")
+    
+    c.setFillColorRGB(0.1, 0.1, 0.1) # Grigio scuro / Nero quasi pieno
+    c.setFont("Helvetica-Bold", 18)
+    c.drawString(64, height - 45, "gether")
+    
+    c.setFillColorRGB(0.4, 0.4, 0.4) # Grigio chiaro per il payoff
+    c.setFont("Helvetica-Oblique", 9)
+    c.drawString(50, height - 60, "the answer is just next 2U")
+    
+    # Ripristina colore nero per il resto del testo
+    c.setFillColorRGB(0, 0, 0)
     
     c.setFont("Helvetica", 10)
-    c.drawString(50, height - 70, f"Data: {dati_visita.get('data')}")
-    c.drawString(50, height - 85, f"Paziente: {cognome} {nome} (ID: {codice_paziente})")
-    c.drawString(50, height - 100, f"Tipologia: {dati_visita.get('tipo')}")
+    c.drawString(50, height - 85, f"Data: {dati_visita.get('data')}")
+    c.drawString(50, height - 100, f"Paziente: {cognome} {nome} (ID: {codice_paziente})")
+    c.drawString(50, height - 115, f"Tipologia: {dati_visita.get('tipo')}")
     
-    c.line(50, height - 110, width - 50, height - 110)
+    c.line(50, height - 125, width - 50, height - 125)
     
     # Contenuti Dettagli / Anamnesi
-    y = height - 130
+    y = height - 145
     c.setFont("Helvetica-Bold", 12)
     c.drawString(50, y, "Dettagli Clinici e Anamnesi:")
     y -= 20
