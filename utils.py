@@ -3,9 +3,20 @@ import os
 import json
 import random
 import string
+from datetime import datetime
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from io import BytesIO
+
+def carica_db_pazienti():
+    """Carica il database dei pazienti dal file JSON."""
+    if os.path.exists("registro_pazienti.json"):
+        try:
+            with open("registro_pazienti.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
 
 def genera_codice_univoco(nome, cognome):
     """Genera un codice univoco basato sulle iniziali e numeri casuali."""
@@ -16,19 +27,13 @@ def genera_codice_univoco(nome, cognome):
 
 def genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_univoco):
     """Salva o aggiorna il registro pazienti in un file JSON locale."""
-    registro = {}
-    if os.path.exists("registro_pazienti.json"):
-        try:
-            with open("registro_pazienti.json", "r", encoding="utf-8") as f:
-                registro = json.load(f)
-        except Exception:
-            registro = {}
+    registro = carica_db_pazienti()
             
     registro[codice_univoco] = {
         "nome": nome,
         "cognome": cognome,
         "data_nascita": str(data_nascita),
-        "ultimo_aggiornamento": str(datetime.today().date()) if 'datetime' in globals() else ""
+        "ultimo_aggiornamento": str(datetime.today().date())
     }
     
     with open("registro_pazienti.json", "w", encoding="utf-8") as f:
