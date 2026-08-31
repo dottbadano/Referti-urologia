@@ -14,6 +14,71 @@ from utils import (
     ELENCO_MESI
 )
 
+TESTO_BASSO_RISCHIO = (
+    "Alla luce del quadro istopatologico (ISUP 1 / Gleason Score 3+3=6), "
+    "dei valori sierici del PSA e della stadiazione clinico-strumentale, "
+    "la malattia si stratifica secondo le Linee Guida internazionali di riferimento "
+    "(EAU/NCCN/AIOM) nella classe a Basso Rischio di progressione. "
+    "In conformità con le raccomandazioni scientifiche vigenti, si ritiene indicata "
+    "in prima istanza l'opzione della Sorveglianza Attiva secondo protocollo codificato. "
+    "Contestualmente, nell'ambito di una corretta informazione ed alleanza terapeutica, "
+    "vengono considerate ed illustrate come opzioni alternative a finalità radicale/curativa "
+    "la Chirurgia (Prostatectomia Radicale) e la Radioterapia. La scelta finale sull'iter "
+    "da intraprendere sarà definita previa valutazione multidisciplinare delle comorbilità "
+    "e ponderata decisione condivisa con il paziente."
+)
+
+TESTO_INTERMEDIO_FAVOREVOLE = (
+    "L'integrazione dei parametri clinico-laboratoristici con i reperti anatomo-patologici "
+    "(ISUP Group 2 / Gleason Score 3+4=7 con prevalenza di Pattern 3 e carico bioptico <50%) "
+    "definisce una classe di Rischio Intermedio Favorevole ai sensi delle Linee Guida di settore "
+    "(EAU/NCCN). In accordo con le raccomandazioni vigenti, si pone indicazione a trattamento "
+    "locale a fine curativo mediante Prostatectomia Radicale oppure Radioterapia. Qualora "
+    "sussistano specifici criteri di selezione e dopo un'adeguata informazione, può essere presa "
+    "in considerazione anche l'opzione della Sorveglianza Attiva con monitoraggio stringente. "
+    "La decisione finale sarà condivisa con il paziente in base al bilancio tra tollerabilità ed aspettativa di vita."
+)
+
+TESTO_INTERMEDIO_SFAVOREVOLE = (
+    "Il quadro anatomopatologico (ISUP Group 2 con carico bioptico ≥50% ovvero ISUP Group 3 / Gleason Score 4+3=7 con "
+    "prevalenza di Pattern 4) configura una classe di Rischio Intermedio Sfavorevole. "
+    "In ottemperanza alle Linee Guida internazionali, per un'accurata stratificazione e stadiazione di malattia "
+    "si ritiene opportuno il completamento diagnostico mediante PET/TC con PSMA. Sulla base dell'esito dello staging "
+    "strumentale, si conferma l'indicazione a trattamento ad intenzione curativa: le opzioni validate comprendono "
+    "l'intervento chirurgico di Prostatectomia Radicale (con linfoadenectomia di stadiazione) ovvero la Radioterapia "
+    "associata a Deprivazione Androgenica a breve/medio termine (ADT 4-6 mesi). La scelta della strategia "
+    "terapeutica definitiva sarà ponderata con il paziente previa valutazione delle comorbilità e del profilo funzionale."
+)
+
+TESTO_ALTO_RISCHIO = (
+    "Caso discusso in sede di DMT Uro-Oncologico. La combinazione dei fattori prognostici "
+    "sfavorevoli, inclusa la presenza di gradazione bioptica elevata (ISUP Group 4 o "
+    "5 / Gleason Score ≥8), colloca il quadro patologico nella categoria ad Alto "
+    "Rischio secondo i criteri della letteratura scientifica accreditata. Ai fini di "
+    "un corretto inquadramento stadiativo primario e per l'esclusione di patologia "
+    "secondaria/occulta, si pone indicazione prioritaria all'esecuzione di PET/TC "
+    "con PSMA, in accordo con le raccomandazioni delle Linee Guida di riferimento. "
+    "All'esito dell'imaging, si prospetta una strategia terapeutica multimodale: le "
+    "opzioni standard comprendono la Radioterapia ad alto dosaggio in combinazione "
+    "con la Deprivazione Androgenica a lungo termine (18-36 mesi) ed eventuale "
+    "terapia ormonale di nuova generazione, oppure l'intervento di Prostatectomia "
+    "Radicale con Linfoadenectomia pelvica estesa nell'ambito di un programma "
+    "integrato. La pianificazione finale verrà concordata con il paziente "
+    "nell'ambito di una decisione clinica condivisa."
+)
+
+TESTO_LOCALMENTE_AVANZATO = (
+    "Alla luce del quadro clinico-strumentale di patologia localmente avanzata "
+    "(sospetto/accertato sconfinamento extracapsulare, invasione delle vescicole seminali o "
+    "coinvolgimento linfonodale), si raccomanda l'esecuzione di PET/TC con PSMA per completamento "
+    "dello staging sistemico di malattia prima dell'avvio del trattamento. In conformità alle Linee Guida "
+    "di settore, si conferma la necessità di un approccio multimodale, individuando come prima opzione "
+    "raccomandata il trattamento Radioterapico ad alto dosaggio associato a Terapia di Deprivazione "
+    "Androgenica (ADT) a lungo termine e/o agenti ormonali di nuova generazione, ovvero l'opzione "
+    "chirurgica integrata (Prostatectomia Radicale con Linfoadenectomia estesa) in casi selezionati. "
+    "Il piano di cura definitivo sarà definito in stretta alleanza terapeutica con il paziente."
+)
+
 def calcola_psadt(psa_precedente, data_precedente_str, psa_attuale, data_attuale):
     if psa_precedente is None or psa_precedente <= 0 or psa_attuale <= psa_precedente or not data_precedente_str:
         return None
@@ -30,15 +95,15 @@ def calcola_psadt(psa_precedente, data_precedente_str, psa_attuale, data_attuale
 def calcola_gruppo_rischio_eau(isup_num, psa, ct_stage, gleason_terziario):
     is_terziario_alto = gleason_terziario in ["Pattern 5 Terziario", "Pattern 4 Terziario"]
     
-    if isup_num >= 4 or psa > 20 or any(stg in ct_stage for stg in ["cT3a", "cT3b", "cT4"]) or is_terziario_alto:
+    if any(stg in ct_stage for stg in ["cT3a", "cT3b", "cT4"]):
+        return ("Localmente Avanzato", True, "Indicata Stadiazione Sistemica (PET/TC PSMA e Imaging di Staging).")
+    elif isup_num >= 4 or psa > 20 or is_terziario_alto:
         return ("Alto / Molto Alto Rischio", True, "Indicata Stadiazione Sistemica (PET/TC PSMA oppure TC + Scintigrafia).")
-    
     elif isup_num in [2, 3] or (10 <= psa <= 20) or any(stg in ct_stage for stg in ["cT2b", "cT2c"]):
         if isup_num == 3 or (isup_num == 2 and psa > 10):
             return ("Rischio Intermedio Sfavorevole", True, "Indicata Stadiazione Sistemica (Preferibile PET/TC PSMA).")
         else:
             return ("Rischio Intermedio Favorevole", False, "Stadiazione sistemica NON indicata di routine.")
-            
     else:
         return ("Basso Rischio", False, "Stadiazione sistemica NON indicata. Candidato per Sorveglianza Attiva.")
 
@@ -191,7 +256,7 @@ def render_modulo():
         with col3:
             st.markdown("🎯 **Valutazione Rischio & Stadiazione**")
             gruppo_rischio, necessita_stadiazione, motivazione_stadiazione = calcola_gruppo_rischio_eau(isup_num, psa_basale, ct_stage, gleason_terziario)
-            st.write(f"**Classe di Rischio:** `{gruppo_rischio}`")
+            st.write(f"**Classe di Rischio / Stadio:** `{gruppo_rischio}`")
             if necessita_stadiazione:
                 st.error("⚠️ **STADIAZIONE SISTEMICA INDICATA**")
             else:
@@ -232,6 +297,16 @@ def render_modulo():
                 genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
                 
                 note_pdf_list = [motivazione_stadiazione, f"Percorso assegnato: {scelta_trattamento}"]
+                if gruppo_rischio == "Basso Rischio":
+                    note_pdf_list.append(TESTO_BASSO_RISCHIO)
+                elif gruppo_rischio == "Rischio Intermedio Favorevole":
+                    note_pdf_list.append(TESTO_INTERMEDIO_FAVOREVOLE)
+                elif gruppo_rischio == "Rischio Intermedio Sfavorevole":
+                    note_pdf_list.append(TESTO_INTERMEDIO_SFAVOREVOLE)
+                elif "Alto" in gruppo_rischio:
+                    note_pdf_list.append(TESTO_ALTO_RISCHIO)
+                elif gruppo_rischio == "Localmente Avanzato":
+                    note_pdf_list.append(TESTO_LOCALMENTE_AVANZATO)
 
                 pdf_bytes = genera_pdf_referto(codice_paziente, dati_v, scelta_trattamento, note_pdf_list, nome=nome_p, cognome=cognome_p)
                 st.success(f"Paziente salvato con successo! Codice: `{codice_paziente}`")
