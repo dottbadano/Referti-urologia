@@ -1,4 +1,4 @@
-         from datetime import datetime
+from datetime import datetime
 import hashlib
 import math
 import streamlit as st
@@ -60,7 +60,7 @@ def calcola_timing_controllo(percorso, dati):
                 "rec_bx": "Programmare Biopsia Prostatica di Riconferma tra i 12 e i 24 mesi.",
                 "alert": "🟢 Cinetica del PSA nei limiti. Proseguire Sorveglianza Attiva.",
             }
-    elif percorso == "Chirurgia" :
+    elif percorso == "Chirurgia (Post-Prostatectomia)":
         psa = dati.get("psa", 0.0)
         mesi_op = dati.get("mesi_post_op", 0)
         if psa >= 0.20:
@@ -246,28 +246,17 @@ def render_modulo():
     elif modalita == "2. Seconda Visita / DMT: Referto Stadiazione & Decisione":
         st.subheader("📑 Seconda Visita / Inquadramento DMT")
         
-        # Caricamento DB locale se session_state è vuoto
-        if "db_pazienti" not in st.session_state or not st.session_state["db_pazienti"]:
-            if os.path.exists("registro_pazienti.json"):
-                st.session_state["db_pazienti"] = {}
-                # Carichiamo dal file del registro o database generale se disponibile
-
         codice_search = st.text_input("Inserisci Codice Univoco Paziente (Obbligatorio per procedere):", key="search_dmt_prostata").strip().upper()
         
         if not codice_search:
             st.warning("⚠️ Inserisci il codice univoco del paziente per sbloccare la scheda della seconda visita.")
         else:
-            # Controllo nel db session o ricarica da file json
             db_attivo = st.session_state.get("db_pazienti", {})
-            if not db_attivo and os.path.exists("registro_pazienti.json"):
-                # Tentativo di recupero rapido dai dati salvati
-                pass
             
             if codice_search in db_attivo:
                 paziente = db_attivo[codice_search]
                 st.success(f"Paziente Trovato: {paziente.get('cognome', '')} {paziente.get('nome', '')} (ID: {codice_search})")
                 
-                # --- VISUALIZZAZIONE STORICO VISITE PRECEDENTI IN ALTO (SCORRIBILE) ---
                 with st.expander("📂 Visualizza Storico Visite / Dati Precedenti del Paziente", expanded=True):
                     visite_prec = paziente.get("visite", [])
                     for idx, v in enumerate(visite_prec, 1):
@@ -313,7 +302,6 @@ def render_modulo():
                 paziente = db_attivo[codice_search]
                 st.success(f"Paziente Trovato: {paziente.get('cognome', '')} {paziente.get('nome', '')} (ID: {codice_search})")
                 
-                # --- VISUALIZZAZIONE STORICO VISITE PRECEDENTI IN ALTO ---
                 with st.expander("📂 Visualizza Storico Visite / Follow-up Precedenti", expanded=True):
                     visite_prec = paziente.get("visite", [])
                     for idx, v in enumerate(visite_prec, 1):
