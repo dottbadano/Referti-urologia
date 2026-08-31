@@ -60,7 +60,7 @@ def calcola_timing_controllo(percorso, dati):
                 "rec_bx": "Programmare Biopsia Prostatica di Riconferma tra i 12 e i 24 mesi.",
                 "alert": "🟢 Cinetica del PSA nei limiti. Proseguire Sorveglianza Attiva.",
             }
-    elif percorso == "Chirurgia (Post-Prostatectomia)":
+    elif percorso == "Chirurgia" :
         psa = dati.get("psa", 0.0)
         mesi_op = dati.get("mesi_post_op", 0)
         if psa >= 0.20:
