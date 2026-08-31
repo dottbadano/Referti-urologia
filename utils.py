@@ -5,7 +5,9 @@ import random
 import string
 from datetime import datetime
 from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 from io import BytesIO
 
 ELENCO_MESI = [
@@ -267,69 +269,71 @@ def formatta_anamnesi_per_pdf(anamnesi):
     return "\n".join(linee) if linee else ""
 
 def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazioni, nome, cognome):
-    """Funzione di generazione PDF di base integrata."""
+    """Funzione di generazione PDF strutturata con SimpleDocTemplate per il ritorno a capo automatico (word wrap)."""
     buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
     
-    # Intestazione grafica con brand 2gether
-    c.setFillColorRGB(0.8, 0, 0) # Rosso
-    c.setFont("Helvetica-Bold", 18)
-    c.drawString(50, height - 45, "2")
+    # Configurazione documento con margini laterali di 50 punti
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=50,
+        rightMargin=50,
+        topMargin=45,
+        bottomMargin=50
+    )
     
-    c.setFillColorRGB(0.1, 0.1, 0.1) # Grigio scuro / Nero quasi pieno
-    c.setFont("Helvetica-Bold", 18)
-    c.drawString(64, height - 45, "gether")
+    styles = getSampleStyleSheet()
     
-    c.setFillColorRGB(0.4, 0.4, 0.4) # Grigio chiaro per il payoff
-    c.setFont("Helvetica-Oblique", 9)
-    c.drawString(50, height - 60, "the answer is just next 2U")
+    # Stili personalizzati per il documento
+    style_brand_title = ParagraphStyle('BrandTitle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=18, leading=20, textColor=colors.HexColor('#CC0000'))
+    style_brand_sub = ParagraphStyle('BrandSub', parent=styles['Normal'], fontName='Helvetica-Oblique', fontSize=9, leading=11, textColor=colors.HexColor('#666666'))
+    style_meta = ParagraphStyle('MetaText', parent=styles['Normal'], fontName='Helvetica', fontSize=10, leading=14, textColor=colors.HexColor('#222222'))
+    style_h2 = ParagraphStyle('SectionH2', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=11, leading=15, textColor=colors.HexColor('#111111'), spaceBefore=10, spaceAfter=4)
+    style_body = ParagraphStyle('BodyTextCustom', parent=styles['Normal'], fontName='Helvetica', fontSize=10, leading=14, textColor=colors.HexColor('#333333'), spaceAfter=4)
+
+    story = []
+
+    # Intestazione personalizzata con brand 2gether
+    story.append(Paragraph("<b><font color='#CC0000'>2</font><font color='#1A1A1A'>gether</font></b>", style_brand_title))
+    story.append(Paragraph("the answer is just next 2U", style_brand_sub))
+    story.append(Spacer(1, 10))
+
+    # Dati Paziente & Intestazione Visita
+    meta_lines = [
+        f"<b>Data Visita:</b> {dati_visita.get('data')}",
+        f"<b>Paziente:</b> {cognome} {nome} (ID: {codice_paziente})",
+        f"<b>Tipologia:</b> {dati_visita.get('tipo')}"
+    ]
+    for ml in meta_lines:
+        story.append(Paragraph(ml, style_meta))
     
-    # Ripristina colore nero per il resto del testo
-    c.setFillColorRGB(0, 0, 0)
-    
-    c.setFont("Helvetica", 10)
-    c.drawString(50, height - 85, f"Data: {dati_visita.get('data')}")
-    c.drawString(50, height - 100, f"Paziente: {cognome} {nome} (ID: {codice_paziente})")
-    c.drawString(50, height - 115, f"Tipologia: {dati_visita.get('tipo')}")
-    
-    c.line(50, height - 125, width - 50, height - 125)
-    
-    # Contenuti Dettagli / Anamnesi
-    y = height - 145
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y, "Dettagli Clinici e Anamnesi:")
-    y -= 20
-    
-    c.setFont("Helvetica", 10)
+    story.append(Spacer(1, 6))
+    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#CCCCCC'), spaceBefore=2, spaceAfter=10))
+
+    # Dettagli Clinici / Anamnesi
     dettagli_testo = dati_visita.get('dettagli', '')
-    for line in dettagli_testo.split('\n'):
-        if y < 100:
-            c.showPage()
-            y = height - 50
-        c.drawString(60, y, line)
-        y -= 15
-        
-    y -= 10
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y, "Percorso Clinico Impostato:")
-    y -= 20
-    c.setFont("Helvetica", 10)
-    c.drawString(60, y, f"• {percorso}")
-    y -= 25
-    
+    if dettagli_testo:
+        story.append(Paragraph("Dettagli Clinici e Anamnesi:", style_h2))
+        for line in dettagli_testo.split('\n'):
+            if line.strip():
+                story.append(Paragraph(line, style_body))
+        story.append(Spacer(1, 6))
+
+    # Percorso Clinico Impostato
+    if percorso:
+        story.append(Paragraph("Percorso Clinico Impostato:", style_h2))
+        story.append(Paragraph(f"• {percorso}", style_body))
+        story.append(Spacer(1, 6))
+
+    # Raccomandazioni e Note (Testi estesi / Referti automatici con word wrap automatico)
     if note_raccomandazioni:
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(50, y, "Raccomandazioni e Note:")
-        y -= 20
-        c.setFont("Helvetica", 10)
+        story.append(Paragraph("Raccomandazioni e Note:", style_h2))
         for rec in note_raccomandazioni:
-            if y < 100:
-                c.showPage()
-                y = height - 50
-            c.drawString(60, y, f"- {rec}")
-            y -= 15
-            
-    c.save()
+            if rec and rec.strip():
+                story.append(Paragraph(f"• {rec}", style_body))
+                story.append(Spacer(1, 4))
+
+    # Generazione finale del PDF nel buffer
+    doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
