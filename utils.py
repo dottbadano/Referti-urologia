@@ -1,6 +1,7 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+import requests
 import os
 import json
 import random
@@ -351,3 +352,25 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
+doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def salva_paziente_su_drive(nome, cognome, data_nascita, codice_univoco):
+    """
+    Invia i dati del paziente al Google Sheet tramite la Web App di Apps Script.
+    """
+    url_web_app = "https://script.google.com/macros/s/AKfycbxMA61mMW_m_9C9xc9v2dziiZIlUseu9KGGI_Qt1r59DzcfL3idMOni9sn3Ja3LTjQ/exec"
+    
+    payload = {
+        "nome": nome,
+        "cognome": cognome,
+        "data_nascita": str(data_nascita),
+        "codice_univoco": codice_univoco
+    }
+    
+    try:
+        risposta = requests.post(url_web_app, json=payload)
+        return risposta.status_code == 200
+    except Exception as e:
+        return False
