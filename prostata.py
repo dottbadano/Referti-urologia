@@ -5,14 +5,14 @@ import streamlit as st
 import os
 import json
 from utils import (
-    salva_db_pazienti, 
-    genera_o_aggiorna_registro, 
-    genera_pdf_referto, 
-    genera_codice_univoco, 
-    render_anamnesi_generale, 
+    salva_db_pazienti,
+    genera_o_aggiorna_registro,
+    genera_pdf_referto,
+    genera_codice_univoco,
+    render_anamnesi_generale,
     formatta_anamnesi_per_pdf,
-salva_paziente_su_drive
-  from utils import ELENCO_MESI
+    salva_paziente_su_drive,
+    ELENCO_MESI
 )
 
 TESTO_BASSO_RISCHIO = (
