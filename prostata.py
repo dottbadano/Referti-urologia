@@ -302,55 +302,55 @@ if modalita == "1. Prima Visita: Inquadramento Bioptico & Rischio":
                     "data_ultimo_psa": str(data_psa_basale),
                     "visite": [dati_v]
                 }
-                salva_db_pazienti(st.session_state["db_pazienti"])
-                genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
-                salva_paziente_su_drive(nome_p, cognome_p, data_nascita_p, codice_univoco)
-                note_pdf_list = [motivazione_stadiazione, f"Percorso assegnato: {scelta_trattamento}"]
-                if gruppo_rischio == "Basso Rischio":
-                    note_pdf_list.append(TESTO_BASSO_RISCHIO)
-                elif gruppo_rischio == "Rischio Intermedio Favorevole":
-                    note_pdf_list.append(TESTO_INTERMEDIO_FAVOREVOLE)
-                elif gruppo_rischio == "Rischio Intermedio Sfavorevole":
-                    note_pdf_list.append(TESTO_INTERMEDIO_SFAVOREVOLE)
-                elif "Alto" in gruppo_rischio:
-                    note_pdf_list.append(TESTO_ALTO_RISCHIO)
-                elif gruppo_rischio == "Localmente Avanzato":
-                    note_pdf_list.append(TESTO_LOCALMENTE_AVANZATO)
+             salva_db_pazienti(st.session_state["db_pazienti"])
+    genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
+    salva_paziente_su_drive(nome_p, cognome_p, data_nascita_p, codice_paziente)
+    note_pdf_list = [motivazione_stadiazione, f"Percorso assegnato: {scelta_trattamento}"]
+    if gruppo_rischio == "Basso Rischio":
+        note_pdf_list.append(TESTO_BASSO_RISCHIO)
+    elif gruppo_rischio == "Rischio Intermedio Favorevole":
+        note_pdf_list.append(TESTO_INTERMEDIO_FAVOREVOLE)
+    elif gruppo_rischio == "Rischio Intermedio Sfavorevole":
+        note_pdf_list.append(TESTO_INTERMEDIO_SFAVOREVOLE)
+    elif "Alto" in gruppo_rischio:
+        note_pdf_list.append(TESTO_ALTO_RISCHIO)
+    elif gruppo_rischio == "Localmente Avanzato":
+        note_pdf_list.append(TESTO_LOCALMENTE_AVANZATO)
 
-                pdf_bytes = genera_pdf_referto(codice_paziente, dati_v, scelta_trattamento, note_pdf_list, nome=nome_p, cognome=cognome_p)
-                st.success(f"Paziente salvato con successo! Codice: `{codice_paziente}`")
-                
-                st.download_button(
-                    label="📄 Scarica Referto PDF Stampabile",
-                    data=pdf_bytes,
-                    file_name=f"Referto_PROSTATA_{cognome_p}_{nome_p}.pdf",
-                    mime="application/pdf"
-                )
+    pdf_bytes = genera_pdf_referto(codice_paziente, dati_v, scelta_trattamento, note_pdf_list, nome=nome_p, cognome=cognome_p)
+    st.success(f"Paziente salvato con successo! Codice: `{codice_paziente}`")
+    
+    st.download_button(
+        label="📄 Scarica Referto PDF Stampabile",
+        data=pdf_bytes,
+        file_name=f"Referto_PROSTATA_{cognome_p}_{nome_p}.pdf",
+        mime="application/pdf"
+    )
 
-    elif modalita == "2. Seconda Visita / DMT: Referto Stadiazione & Decisione":
-        st.subheader("📑 Seconda Visita / Inquadramento DMT")
+elif modalita == "2. Seconda Visita / DMT: Referto Stadiazione & Decisione":
+    st.subheader("📑 Seconda Visita / Inquadramento DMT")
+    
+    codice_search = st.text_input("Inserisci Codice Univoco Paziente (Obbligatorio per procedere):", key="search_dmt_prostata").strip().upper()
+    
+    if not codice_search:
+        st.warning("⚠️ Inserisci il codice univoco del paziente per sbloccare la scheda della seconda visita.")
+    else:
+        db_attivo = st.session_state.get("db_pazienti", {})
         
-        codice_search = st.text_input("Inserisci Codice Univoco Paziente (Obbligatorio per procedere):", key="search_dmt_prostata").strip().upper()
-        
-        if not codice_search:
-            st.warning("⚠️ Inserisci il codice univoco del paziente per sbloccare la scheda della seconda visita.")
-        else:
-            db_attivo = st.session_state.get("db_pazienti", {})
+        if codice_search in db_attivo:
+            paziente = db_attivo[codice_search]
+            st.success(f"Paziente Trovato: {paziente.get('cognome', '')} {paziente.get('nome', '')} (ID: {codice_search})")
             
-            if codice_search in db_attivo:
-                paziente = db_attivo[codice_search]
-                st.success(f"Paziente Trovato: {paziente.get('cognome', '')} {paziente.get('nome', '')} (ID: {codice_search})")
-                
-                with st.expander("📂 Visualizza Storico Visite / Dati Precedenti del Paziente", expanded=True):
-                    visite_prec = paziente.get("visite", [])
-                    for idx, v in enumerate(visite_prec, 1):
-                        st.markdown(f"**Visita {idx} - Data: {v.get('data')} | Tipo: {v.get('tipo')}**")
-                        st.text(v.get('dettagli', 'Nessun dettaglio'))
-                        st.markdown("---")
-                
-                st.markdown("### ✍️ Inserimento Seconda Visita / Esito Stadiazione")
-                esito_stadiazione = st.selectbox("Esito Imaging di Stadiazione (es. PET/TC PSMA):", ["Negativo per malattia a distanza", "Positivo per recidiva locale", "Positivo per linfonodi regionali/pelvici", "Positivo per M1 (distanza)"])
-                nota_dmt = st.text_area("Note della Discussione Multidisciplinare (DMT):")
+            with st.expander("📂 Visualizza Storico Visite / Dati Precedenti del Paziente", expanded=True):
+                visite_prec = paziente.get("visite", [])
+                for idx, v in enumerate(visite_prec, 1):
+                    st.markdown(f"**Visita {idx} - Data: {v.get('data')} | Tipo: {v.get('tipo')}**")
+                    st.text(v.get('dettagli', 'Nessun dettaglio'))
+                    st.markdown("---")
+            
+            st.markdown("### ✍️ Inserimento Seconda Visita / Esito Stadiazione")
+            esito_stadiazione = st.selectbox("Esito Imaging di Stadiazione (es. PET/TC PSMA):", ["Negativo per malattia a distanza", "Positivo per recidiva locale", "Positivo per linfonodi regionali/pelvici", "Positivo per M1 (distanza)"])
+            nota_dmt = st.text_area("Note della Discussione Multidisciplinare (DMT):")
                 
                 if st.button("💾 Salva Seconda Visita & Genera PDF", type="primary"):
                     dettagli_v2 = f"Esito Stadiazione: {esito_stadiazione}\nNote DMT: {nota_dmt}"
