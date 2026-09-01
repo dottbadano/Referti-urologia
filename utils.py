@@ -1,4 +1,6 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
 import os
 import json
 import random
@@ -16,24 +18,30 @@ ELENCO_MESI = [
 ]
 
 def carica_db_pazienti():
-    """Carica il database dei pazienti dal file JSON."""
-    if os.path.exists("registro_pazienti.json"):
-        try:
-            with open("registro_pazienti.json", "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
-    return {}
+    """Carica il database dei pazienti dal Foglio Google su Drive."""
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(ttl=0)
+        
+        registro = {}
+        if not df.empty and 'codice' in df.columns:
+            for _, row in df.iterrows():
+                codice = str(row['codice']).strip()
+                if codice and codice != 'nan':
+                    registro[codice] = {
+                        "nome": str(row.get('nome', '')),
+                        "cognome": str(row.get('cognome', '')),
+                        "data_nascita": str(row.get('data_nascita', '')),
+                        "ultimo_aggiornamento": str(row.get('ultimo_aggiornamento', datetime.today().date()))
+                    }
+        return registro
+    except Exception as e:
+        print(f"Errore nella lettura del database su Google Sheets: {e}")
+        return {}
 
 def salva_db_pazienti(registro):
-    """Salva il database dei pazienti aggiornato nel file JSON."""
-    try:
-        with open("registro_pazienti.json", "w", encoding="utf-8") as f:
-            json.dump(registro, f, ensure_ascii=False, indent=4)
-        return True
-    except Exception as e:
-        print(f"Errore nel salvataggio del database: {e}")
-        return False
+    """Mantenuta per compatibilità (la scrittura avviene direttamente in genera_o_aggiorna_registro)."""
+    return True
 
 def genera_codice_univoco(nome, cognome):
     """Genera un codice univoco basato sulle iniziali e numeri casuali."""
@@ -43,17 +51,31 @@ def genera_codice_univoco(nome, cognome):
     return f"{c_init}{n_init}-{rand_num}"
 
 def genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_univoco):
-    """Salva o aggiorna il registro pazienti in un file JSON locale."""
-    registro = carica_db_pazienti()
+    """Salva o aggiorna il registro pazienti direttamente nel Foglio Google."""
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(ttl=0)
+        
+        nuova_riga = pd.DataFrame([{
+            "codice": codice_univoco,
+            "nome": nome,
+            "cognome": cognome,
+            "data_nascita": str(data_nascita),
+            "ultimo_aggiornamento": str(datetime.today().date())
+        }])
+        
+        if df.empty or 'codice' not in df.columns:
+            df_aggiornato = nuova_riga
+        else:
+            # Se il codice esiste già, rimuoviamo la vecchia riga per aggiornarla
+            df = df[df['codice'].astype(str).str.strip() != str(codice_univoco)]
+            df_aggiornato = pd.concat([df, nuova_riga], ignore_index=True)
             
-    registro[codice_univoco] = {
-        "nome": nome,
-        "cognome": cognome,
-        "data_nascita": str(data_nascita),
-        "ultimo_aggiornamento": str(datetime.today().date())
-    }
-    
-    salva_db_pazienti(registro)
+        conn.update(data=df_aggiornato)
+        return True
+    except Exception as e:
+        print(f"Errore nel salvataggio su Google Sheets: {e}")
+        return False
 
 def render_anamnesi_generale(prefix="gen"):
     """Renderizza l'inquadramento clinico generale con campi facoltativi."""
@@ -206,7 +228,7 @@ def render_anamnesi_generale(prefix="gen"):
     }
 
 def formatta_anamnesi_per_pdf(anamnesi):
-    """Genera una stringa pulita ed ordinata contenente SOLO i campi anamnestici flaggati o compilati, senza spazi vuoti."""
+    """Genera una stringa pulita ed ordinata contenente SOLO i campi anamnestici flaggati o compilati."""
     linee = []
     
     patologie = []
@@ -269,10 +291,9 @@ def formatta_anamnesi_per_pdf(anamnesi):
     return "\n".join(linee) if linee else ""
 
 def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazioni, nome, cognome):
-    """Funzione di generazione PDF strutturata con SimpleDocTemplate per il ritorno a capo automatico (word wrap)."""
+    """Funzione di generazione PDF strutturata con SimpleDocTemplate per il ritorno a capo automatico."""
     buffer = BytesIO()
     
-    # Configurazione documento con margini laterali di 50 punti
     doc = SimpleDocTemplate(
         buffer,
         pagesize=letter,
@@ -284,7 +305,6 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
     
     styles = getSampleStyleSheet()
     
-    # Stili personalizzati per il documento
     style_brand_title = ParagraphStyle('BrandTitle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=18, leading=20, textColor=colors.HexColor('#CC0000'))
     style_brand_sub = ParagraphStyle('BrandSub', parent=styles['Normal'], fontName='Helvetica-Oblique', fontSize=9, leading=11, textColor=colors.HexColor('#666666'))
     style_meta = ParagraphStyle('MetaText', parent=styles['Normal'], fontName='Helvetica', fontSize=10, leading=14, textColor=colors.HexColor('#222222'))
@@ -293,12 +313,10 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
 
     story = []
 
-    # Intestazione personalizzata con brand 2gether
     story.append(Paragraph("<b><font color='#CC0000'>2</font><font color='#1A1A1A'>gether</font></b>", style_brand_title))
     story.append(Paragraph("the answer is just next 2U", style_brand_sub))
     story.append(Spacer(1, 10))
 
-    # Dati Paziente & Intestazione Visita
     meta_lines = [
         f"<b>Data Visita:</b> {dati_visita.get('data')}",
         f"<b>Paziente:</b> {cognome} {nome} (ID: {codice_paziente})",
@@ -310,7 +328,6 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
     story.append(Spacer(1, 6))
     story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#CCCCCC'), spaceBefore=2, spaceAfter=10))
 
-    # Dettagli Clinici / Anamnesi
     dettagli_testo = dati_visita.get('dettagli', '')
     if dettagli_testo:
         story.append(Paragraph("Dettagli Clinici e Anamnesi:", style_h2))
@@ -319,13 +336,11 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
                 story.append(Paragraph(line, style_body))
         story.append(Spacer(1, 6))
 
-    # Percorso Clinico Impostato
     if percorso:
         story.append(Paragraph("Percorso Clinico Impostato:", style_h2))
         story.append(Paragraph(f"• {percorso}", style_body))
         story.append(Spacer(1, 6))
 
-    # Raccomandazioni e Note (Testi estesi / Referti automatici con word wrap automatico)
     if note_raccomandazioni:
         story.append(Paragraph("Raccomandazioni e Note:", style_h2))
         for rec in note_raccomandazioni:
@@ -333,7 +348,6 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
                 story.append(Paragraph(f"• {rec}", style_body))
                 story.append(Spacer(1, 4))
 
-    # Generazione finale del PDF nel buffer
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
