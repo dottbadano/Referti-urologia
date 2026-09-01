@@ -7,6 +7,28 @@ def render_radioterapia(paziente, db_attivo, codice_search):
     st.markdown("### 🟡 Protocollo di Radioterapia")
     st.info("Gestione del trattamento radioterapico, impostazione della dose, terapia ormonale associata con selezione specifica e ARSI, e monitoraggio biochimico con criteri di Phoenix (Nadir + 2 ng/mL).")
     
+    # Sezione di monitoraggio PSA e calcolo Phoenix posta FUORI dal form per reattività immediata
+    st.markdown("#### 📈 Monitoraggio PSA e Criteri di Recidiva (Phoenix)")
+    st.write("Il cut-off di ripresa biochimica post-radioterapia è definito secondo i **Criteri di Phoenix** come **Nadir + 2.0 ng/mL**.")
+    
+    col_psa_rt1, col_psa_rt2, col_psa_rt3 = st.columns(3)
+    with col_psa_rt1:
+        valore_nadir = st.number_input("Valore Nadir PSA raggiunto (ng/mL)", min_value=0.0, max_value=50.0, value=0.0, step=0.01, key="rt_nadir")
+    with col_psa_rt2:
+        valore_psa_attuale_rt = st.number_input("Valore PSA Attuale di Controllo (ng/mL)", min_value=0.0, max_value=50.0, value=0.0, step=0.01, key="rt_psa_att")
+    with col_psa_rt3:
+        soglia_phoenix = valore_nadir + 2.0
+        st.metric("Soglia Critica di Recidiva (Nadir + 2)", f"{soglia_phoenix:.2f} ng/mL")
+
+    allerta_phoenix = False
+    if valore_nadir > 0 and valore_psa_attuale_rt >= soglia_phoenix:
+        allerta_phoenix = True
+        st.error(f"🚨 **ALLERTA BIOCHIMICA (Criteri di Phoenix)**: Il PSA attuale ({valore_psa_attuale_rt} ng/mL) supera la soglia critica di Nadir + 2 ng/mL ({soglia_phoenix:.2f} ng/mL). Sospetta recidiva biochimica.")
+    else:
+        st.success("✅ Valore di PSA sotto la soglia di fallimento biochimico di Phoenix.")
+
+    st.markdown("---")
+
     with st.form(key="form_radioterapia"):
         st.markdown("#### ⚡ Caratteristiche del Trattamento Radioterapico")
         
@@ -35,7 +57,6 @@ def render_radioterapia(paziente, db_attivo, codice_search):
         with col_arsi2:
             tipo_arsi = st.selectbox("Molecola ARSI", ["Nessuna", "Apalutamide", "Darolutamide", "Enzalutamide", "Abiraterone"], key="rt_tipo_arsi")
 
-        # Linee guida per la tempistica della terapia ormonale in base alla classe di rischio
         if fatto_lhrh == "Sì":
             if "Basso" in classe_rischio:
                 st.info("ℹ️ **Linee Guida**: Per i pazienti a basso rischio, la terapia ormonale neoadiuvante/adiuvante non è solitamente raccomandata.")
@@ -43,27 +64,6 @@ def render_radioterapia(paziente, db_attivo, codice_search):
                 st.info("ℹ️ **Linee Guida (Rischio Intermedio)**: Raccomandata terapia ormonale a breve termine (4-6 mesi).")
             elif "Alto" in classe_rischio or "Molto Alto" in classe_rischio:
                 st.warning("⚠️ **Linee Guida (Alto/Molto Alto Rischio)**: Raccomandata terapia ormonale a lungo termine (18-36 mesi).")
-
-        st.markdown("---")
-        st.markdown("#### 📈 Monitoraggio PSA e Criteri di Recidiva (Phoenix)")
-        st.write("Il cut-off di ripresa biochimica post-radioterapia è definito secondo i **Criteri di Phoenix** come **Nadir + 2.0 ng/mL**.")
-        
-        col_psa_rt1, col_psa_rt2, col_psa_rt3 = st.columns(3)
-        with col_psa_rt1:
-            valore_nadir = st.number_input("Valore Nadir PSA raggiunto (ng/mL)", min_value=0.0, max_value=50.0, value=0.0, step=0.01, key="rt_nadir")
-        with col_psa_rt2:
-            valore_psa_attuale_rt = st.number_input("Valore PSA Attuale di Controllo (ng/mL)", min_value=0.0, max_value=50.0, value=0.0, step=0.01, key="rt_psa_att")
-        with col_psa_rt3:
-            soglia_phoenix = valore_nadir + 2.0
-            st.metric("Soglia Critica di Recidiva (Nadir + 2)", f"{soglia_phoenix:.2f} ng/mL")
-
-        # Verifica allerta Phoenix
-        allerta_phoenix = False
-        if valore_nadir > 0 and valore_psa_attuale_rt >= soglia_phoenix:
-            allerta_phoenix = True
-            st.error(f"🚨 **ALLERTA BIOCHIMICA (Criteri di Phoenix)**: Il PSA attuale ({valore_psa_attuale_rt} ng/mL) supera la soglia critica di Nadir + 2 ng/mL ({soglia_phoenix:.2f} ng/mL). Sospetta recidiva biochimica.")
-        else:
-            st.success("✅ Valore di PSA sotto la soglia di fallimento biochimico di Phoenix.")
 
         st.markdown("---")
         st.markdown("#### 📅 Tabella di Scadenziario Follow-up PSA Post-Radioterapia")
@@ -100,7 +100,6 @@ def render_radioterapia(paziente, db_attivo, codice_search):
             salva_db_pazienti(db_attivo)
             st.success("Dati di radioterapia salvati correttamente!")
 
-            # Generazione immediata del PDF per la stampa
             pdf_bytes = genera_pdf_referto(
                 codice_search, 
                 dati_v_rt, 
@@ -116,4 +115,3 @@ def render_radioterapia(paziente, db_attivo, codice_search):
                 mime="application/pdf",
                 key="download_pdf_radioterapia"
             )
-```[cite: 5]
