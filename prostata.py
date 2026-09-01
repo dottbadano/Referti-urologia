@@ -14,6 +14,10 @@ from utils import (
     salva_paziente_su_drive,
     ELENCO_MESI
 )
+from moduli_trattamenti.sorveglianza import render_sorveglianza_attiva
+from moduli_trattamenti.prostatectomia import render_prostatectomia
+from moduli_trattamenti.radioterapia import render_radioterapia
+from moduli_trattamenti.terapia_medica import render_terapia_medica
 
 TESTO_BASSO_RISCHIO = (
     "Alla luce del quadro istopatologico (ISUP 1 / Gleason Score 3+3=6), "
@@ -172,6 +176,15 @@ def calcola_timing_controllo(percorso, dati):
             "rec_bx": None,
             "rec_azione": "Proseguire monitoraggio del Nadir.",
             "alert": "🟢 Cinetica del PSA stabile / post-attinica regolare.",
+        }
+    elif percorso == "Terapia Medica / ADT":
+        return {
+            "rec_psa": "PSA e testosterone sierico ogni 3-6 mesi.",
+            "rec_imaging": "Imaging di rivalutazione clinica secondo evoluzione sintomatica o biochimica.",
+            "rec_rmn": None,
+            "rec_bx": None,
+            "rec_azione": "Monitoraggio tollerabilità ed efficacia della terapia sistemica.",
+            "alert": "🔵 In trattamento medico / ADT.",
         }
     return {"rec_psa": "PSA + Visita tra 6 Mesi.", "alert": "Info standard."}
 
@@ -381,7 +394,15 @@ def render_modulo():
                 st.success("✅ **STADIAZIONE NON INDICATA AB INITIO**")
 
         st.markdown("---")
-        scelta_trattamento = st.selectbox("Trattamento Concordato / Scelto:", ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia"]) if not necessita_stadiazione else "In attesa di Stadiazione (DMT II)"
+        if not necessita_stadiazione:
+            st.markdown("### 🎯 Decisione Condivisa del Trattamento (Basso / Intermedio Favorevole)")
+            scelta_trattamento = st.selectbox(
+                "Seleziona l'opzione terapeutica scelta dal paziente:",
+                ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia", "Terapia Medica / ADT"]
+            )
+        else:
+            scelta_trattamento = "In attesa di Stadiazione (DMT II)"
+            st.info("ℹ️ Il quadro clinico richiede una stadiazione preventiva. La scelta del trattamento radicale avverrà in seconda visita dopo l'imaging.")
 
         if st.button("💾 Salvataggio & Genera Report PDF (Prostata)", type="primary"):
             if not nome_p or not cognome_p or not codice_paziente:
@@ -396,7 +417,7 @@ def render_modulo():
 
                 blocco_anamnesi_str = f"\nAnamnesi Generale:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
                 
-                dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_num}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}\n• Screening G8: {totale_g8}/17{blocco_anamnesi_str}"
+                dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_num}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}\n• Screening G8: {totale_g8}/17\n\n👉 Il paziente decide per: {scelta_trattamento}{blocco_anamnesi_str}"
 
                 dati_v = {
                     "data": str(datetime.today().date()),
@@ -425,7 +446,7 @@ def render_modulo():
                 genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
                 salva_paziente_su_drive(nome_p, cognome_p, data_nascita_p, codice_paziente)
                 
-                note_pdf_list = [motivazione_stadiazione, f"Percorso assegnato: {scelta_trattamento}", f"Punteggio Screening G8: {totale_g8}/17"]
+                note_pdf_list = [motivazione_stadiazione, f"Il paziente decide per: {scelta_trattamento}", f"Punteggio Screening G8: {totale_g8}/17"]
                 if gruppo_rischio == "Basso Rischio":
                     note_pdf_list.append(TESTO_BASSO_RISCHIO)
                 elif gruppo_rischio == "Rischio Intermedio Favorevole":
@@ -450,48 +471,66 @@ def render_modulo():
     elif modalita == "2. Seconda Visita / DMT: Referto Stadiazione & Decisione":
         st.subheader("📑 Seconda Visita / Inquadramento DMT")
         
-        codice_search = st.text_input("Inserisci Codice Univoco Paziente (Obbligatorio per procedere):", key="search_dmt_prostata").strip().upper()
+        codice_search = st.text_input("Inserisci Codice Univoco Paziente (Obbligatorio):", key="search_dmt_prostata").strip().upper()
         
         if not codice_search:
-            st.warning("⚠️ Inserisci il codice univoco del paziente per sbloccare la scheda della seconda visita.")
+            st.warning("⚠️ Inserisci il codice univoco del paziente per sbloccare la scheda.")
         else:
             db_attivo = st.session_state.get("db_pazienti", {})
             
             if codice_search in db_attivo:
                 paziente = db_attivo[codice_search]
+                percorso_iniziale = paziente.get("percorso_scelto", "Non definito")
+                rischio_paziente = paziente.get("rischio", "")
+                
                 st.success(f"Paziente Trovato: {paziente.get('cognome', '')} {paziente.get('nome', '')} (ID: {codice_search})")
+                st.info(f"📍 **Percorso / Classe di Rischio Iniziale:** {rischio_paziente} | Opzione: {percorso_iniziale}")
                 
-                with st.expander("📂 Visualizza Storico Visite / Dati Precedenti del Paziente", expanded=True):
-                    visite_prec = paziente.get("visite", [])
-                    for idx, v in enumerate(visite_prec, 1):
+                with st.expander("📂 Visualizza Storico Visite Precedenti", expanded=False):
+                    for idx, v in enumerate(paziente.get("visite", []), 1):
                         st.markdown(f"**Visita {idx} - Data: {v.get('data')} | Tipo: {v.get('tipo')}**")
-                        st.text(v.get('dettagli', 'Nessun dettaglio'))
+                        st.text(v.get('dettagli', ''))
                         st.markdown("---")
-                
-                st.markdown("### ✍️ Inserimento Seconda Visita / Esito Stadiazione")
-                esito_stadiazione = st.selectbox("Esito Imaging di Stadiazione (es. PET/TC PSMA):", ["Negativo per malattia a distanza", "Positivo per recidiva locale", "Positivo per linfonodi regionali/pelvici", "Positivo per M1 (distanza)"])
-                nota_dmt = st.text_area("Note della Discussione Multidisciplinare (DMT):")
-                    
-                if st.button("💾 Salva Seconda Visita & Genera PDF", type="primary"):
-                    dettagli_v2 = f"Esito Stadiazione: {esito_stadiazione}\nNote DMT: {nota_dmt}"
-                    dati_v = {
-                        "data": str(datetime.today().date()),
-                        "tipo": "Seconda Visita / DMT & Stadiazione",
-                        "dettagli": dettagli_v2
-                    }
-                    paziente["visite"].append(dati_v)
-                    salva_db_pazienti(db_attivo)
-                    
-                    pdf_bytes = genera_pdf_referto(codice_search, dati_v, paziente.get("percorso_scelto", "Non definito"), [esito_stadiazione, nota_dmt], nome=paziente.get('nome',''), cognome=paziente.get('cognome',''))
-                    st.success("Seconda visita salvata con successo!")
-                    st.download_button(
-                        label="📄 Scarica Referto Seconda Visita PDF",
-                        data=pdf_bytes,
-                        file_name=f"SecondaVisita_PROSTATA_{codice_search}.pdf",
-                        mime="application/pdf"
+
+                # Verifica se il paziente richiede la stadiazione (Intermedio Sfavorevole, Alto Rischio, Avanzato)
+                richiede_staging_effettivo = "Stadiazione" in percorso_iniziale or "Sfavorevole" in rischio_paziente or "Alto" in rischio_paziente or "Avanzato" in rischio_paziente
+
+                if richiede_staging_effettivo:
+                    st.markdown("### 🔬 1. Inserimento Esito Stadiazione (PET/TC & DMT)")
+                    esito_stadiazione = st.selectbox(
+                        "Esito Imaging di Stadiazione:", 
+                        ["Negativo per malattia a distanza", "Positivo per recidiva locale", "Positivo per linfonodi regionali", "Positivo per M1 (distanza)"]
                     )
+                    nota_dmt = st.text_area("Note della Discussione Multidisciplinare (DMT):")
+                    
+                    st.markdown("### 🎯 2. Scelta Definitiva del Trattamento Post-Stadiazione")
+                    nuova_scelta = st.selectbox(
+                        "Seleziona il trattamento definitivo concordato:",
+                        ["Chirurgia (Post-Prostatectomia)", "Radioterapia", "Terapia Medica / ADT", "Sorveglianza Attiva"]
+                    )
+                    
+                    if st.button("💾 Salva Stadiazione & Aggiorna Percorso", type="primary"):
+                        paziente["percorso_scelto"] = nuova_scelta
+                        dettagli_v2 = f"Completamento Stadiazione. Esito: {esito_stadiazione}\nNote DMT: {nota_dmt}\n👉 Nuovo percorso definito: {nuova_scelta}"
+                        dati_v = {"data": str(datetime.today().date()), "tipo": "Seconda Visita / Stadiazione & Decisione", "dettagli": dettagli_v2}
+                        paziente["visite"].append(dati_v)
+                        salva_db_pazienti(db_attivo)
+                        st.success("Stadiazione salvata e percorso aggiornato con successo!")
+                
+                # Smistamento automatico ai moduli dedicati in base al percorso attivo
+                percorso_attivo = paziente.get("percorso_scelto", "")
+                st.divider()
+                
+                if "Sorveglianza" in percorso_attivo:
+                    render_sorveglianza_attiva(paziente, db_attivo, codice_search)
+                elif "Chirurgia" in percorso_attivo:
+                    render_prostatectomia(paziente, db_attivo, codice_search)
+                elif "Radioterapia" in percorso_attivo:
+                    render_radioterapia(paziente, db_attivo, codice_search)
+                elif "Terapia Medica" in percorso_attivo:
+                    render_terapia_medica(paziente, db_attivo, codice_search)
             else:
-                st.error("❌ Nessun paziente trovato con questo codice univoco. Verifica l'ID inserito.")
+                st.error("❌ Nessun paziente trovato con questo codice univoco.")
 
     elif modalita == "3. Controllo Successivo / Follow-up PSA":
         st.subheader("🔍 Richiama Paziente per Follow-up")
@@ -532,8 +571,10 @@ def render_modulo():
                     res_fu = calcola_timing_controllo("Sorveglianza Attiva", {"isup": paziente.get("isup", 1), "psadt": psadt_calcolato})
                 elif percorso_attuale == "Chirurgia (Post-Prostatectomia)":
                     res_fu = calcola_timing_controllo("Chirurgia (Post-Prostatectomia)", {"psa": psa_attuale, "mesi_post_op": 6})
-                else:
+                elif percorso_attuale == "Radioterapia":
                     res_fu = calcola_timing_controllo("Radioterapia", {"psa": psa_attuale, "psa_nadir": 0.1, "mesi_post_rt": 12})
+                else:
+                    res_fu = calcola_timing_controllo("Terapia Medica / ADT", {"psa": psa_attuale})
 
                 st.info(f"**Indicazioni:** {res_fu['rec_psa']}")
                 if res_fu.get('alert'):
@@ -570,4 +611,4 @@ def render_modulo():
                         mime="application/pdf"
                     )
             else:
-                st.error("❌ Nessun paziente trovato con questo codice univoco. Verifica l'ID inserito.")
+                st.error("❌ Nessun paziente trovato con questo codice univoco.")
