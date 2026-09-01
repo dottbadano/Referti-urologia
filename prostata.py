@@ -296,7 +296,7 @@ def render_modulo():
                 }
                 salva_db_pazienti(st.session_state["db_pazienti"])
                 genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
-                
+                salva_paziente_su_drive(nome_p, cognome_p, data_nascita_p, codice_univoco)
                 note_pdf_list = [motivazione_stadiazione, f"Percorso assegnato: {scelta_trattamento}"]
                 if gruppo_rischio == "Basso Rischio":
                     note_pdf_list.append(TESTO_BASSO_RISCHIO)
