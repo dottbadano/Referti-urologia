@@ -176,7 +176,7 @@ def render_modulo():
         horizontal=True,
     )
 
-    if modalita == "1. Prima Visita: Inquadramento Bioptico & Rischio":
+if modalita == "1. Prima Visita: Inquadramento Bioptico & Rischio":
         st.subheader("📋 Inserimento Anagrafica Paziente (Nuovo Accesso)")
         
         if "prostata_nome" not in st.session_state: st.session_state["prostata_nome"] = ""
@@ -185,14 +185,14 @@ def render_modulo():
 
         col_a, col_b, col_c = st.columns(3)
         with col_a:
-            nome_p = st.text_input("Nome Paziente", key="input_nome_prostata")
+            nome_p = st.text_input("Nome Paziente", value=st.session_state["prostata_nome"], key="input_nome_prostata")
         with col_b:
-            cognome_p = st.text_input("Cognome Paziente", key="input_cognome_prostata")
+            cognome_p = st.text_input("Cognome Paziente", value=st.session_state["prostata_cognome"], key="input_cognome_prostata")
         
         if nome_p != st.session_state["prostata_nome"] or cognome_p != st.session_state["prostata_cognome"]:
             st.session_state["prostata_nome"] = nome_p
             st.session_state["prostata_cognome"] = cognome_p
-            if nome_p and cognome_p:
+            if nome_p.strip() and cognome_p.strip():
                 st.session_state["prostata_id"] = genera_codice_univoco(nome_p, cognome_p)
             else:
                 st.session_state["prostata_id"] = ""
