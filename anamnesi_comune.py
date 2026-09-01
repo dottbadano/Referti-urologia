@@ -35,16 +35,19 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
     with col_b:
         cognome = st.text_input("Cognome Paziente", key=f"input_cognome_{prefix}")
     
-    # Generazione automatica ID in sessione
-    id_key = f"id_generato_{prefix}"
+    # Generazione automatica ID in sessione con gestione nativa della key
+    id_key = f"input_id_{prefix}"
+    
     if id_key not in st.session_state:
         st.session_state[id_key] = ""
         
-    if nome and cognome:
-        st.session_state[id_key] = genera_codice_univoco_organo(nome, cognome, sigla_organo)
+    # Calcola il nuovo codice se nome e cognome sono validi
+    nuovo_id = genera_codice_univoco_organo(nome, cognome, sigla_organo)
+    if nuovo_id:
+        st.session_state[id_key] = nuovo_id
 
     with col_c:
-        codice_paziente = st.text_input("Codice Univoco / ID (Autogenerato)", value=st.session_state[id_key], key=f"input_id_{prefix}")
+        codice_paziente = st.text_input("Codice Univoco / ID (Autogenerato)", key=id_key)
 
     data_nascita = st.date_input("Data di Nascita", datetime(1960, 1, 1), key=f"input_nascita_{prefix}")
     
