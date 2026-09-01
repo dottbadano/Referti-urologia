@@ -270,6 +270,14 @@ def render_modulo():
             if not nome_p or not cognome_p or not codice_paziente:
                 st.error("Inserire Nome, Cognome e Codice Univoco del paziente.")
             else:
+                # Invia i dati a Google Sheets in background
+                salva_paziente_su_drive(
+                    nome=nome_p,
+                    cognome=cognome_p,
+                    data_nascita=data_nascita,  # Assicurati che la variabile della data nel tuo form si chiami così (o cambiala con il nome corretto)
+                    codice_univoco=codice_paziente
+                )
+
                 blocco_anamnesi_str = f"\nAnamnesi Generale:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
                 
                 dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_num}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}{blocco_anamnesi_str}"
