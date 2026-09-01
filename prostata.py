@@ -193,11 +193,11 @@ def render_modulo():
         
         col_a, col_b, col_c = st.columns(3)
         with col_a:
-            nome_p = st.text_input("Nome Paziente", key="input_nome_prostata")
+            nome_p = st.text_input("Nome Paziente", key="input_nome_prostata", on_change=st.rerun)
         with col_b:
-            cognome_p = st.text_input("Cognome Paziente", key="input_cognome_prostata")
+            cognome_p = st.text_input("Cognome Paziente", key="input_cognome_prostata", on_change=st.rerun)
         
-        # Generazione automatica sicura del codice univoco basata sui campi di input
+        # Calcolo istantaneo del codice univoco basato sui campi di input
         id_iniziale = ""
         if nome_p.strip() and cognome_p.strip():
             try:
@@ -205,7 +205,7 @@ def render_modulo():
             except Exception:
                 id_iniziale = hashlib.md5(f"{nome_p}{cognome_p}".encode()).hexdigest()[:8].upper()
 
-        # Gestione eventuale forzatura manuale tramite pulsante
+        # Gestione forzatura manuale tramite pulsante
         if "forzatura_id" in st.session_state and st.session_state.get("last_nome") == nome_p and st.session_state.get("last_cognome") == cognome_p:
             id_iniziale = st.session_state["forzatura_id"]
         else:
@@ -306,6 +306,7 @@ def render_modulo():
                     "organo": "PROSTATA",
                     "nome": nome_p,
                     "cognome": cognome_p,
+                    "data_nascita": str(data_nascita_p),
                     "isup": isup_num,
                     "rischio": gruppo_rischio,
                     "percorso_scelto": scelta_trattamento,
