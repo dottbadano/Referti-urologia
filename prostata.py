@@ -188,6 +188,109 @@ def aggiorna_codice_auto():
         st.session_state["id_prostata_generato"] = ""
         st.session_state["input_id_prostata"] = ""
 
+def render_g8_screening():
+    st.markdown("🎯 **Valutazione Geriatrica Rapida - Screening G8 (SIOG)**")
+    
+    with st.expander("Compila il questionario G8", expanded=False):
+        q1 = st.selectbox(
+            "1. Ha ridotto l'alimentazione negli ultimi 3 mesi per perdita d'appetito, problemi digestivi, difficoltà di masticazione o deglutizione?",
+            [
+                ("0 - Grave perdita dell'appetito", 0),
+                ("1 - Moderata perdita dell'appetito", 1),
+                ("2 - Nessuna perdita dell'appetito", 2)
+            ],
+            format_func=lambda x: x[0],
+            key="g8_q1"
+        )[1]
+
+        q2 = st.selectbox(
+            "2. Perdita di peso negli ultimi 3 mesi:",
+            [
+                ("0 - Perdita di peso > 3 kg", 0),
+                ("1 - Non sa", 1),
+                ("2 - Perdita di peso tra 1 e 3 kg", 2),
+                ("3 - Nessuna perdita di peso", 3)
+            ],
+            format_func=lambda x: x[0],
+            key="g8_q2"
+        )[1]
+
+        q3 = st.selectbox(
+            "3. Mobilità:",
+            [
+                ("0 - Costretto a letto o in sedia a rotelle", 0),
+                ("1 - Esce di casa con difficoltà / autonomo in casa", 1),
+                ("2 - Esce normalmente di casa", 2)
+            ],
+            format_func=lambda x: x[0],
+            key="g8_q3"
+        )[1]
+
+        q4 = st.selectbox(
+            "4. Ha avuto una malattia acuta o uno stress psicologico severo negli ultimi 3 mesi?",
+            [
+                ("0 - Sì", 0),
+                ("2 - No", 2)
+            ],
+            format_func=lambda x: x[0],
+            key="g8_q4"
+        )[1]
+
+        q5 = st.selectbox(
+            "5. Problemi neuropsicologici:",
+            [
+                ("0 - Demenza o depressione severa", 0),
+                ("1 - Demenza o depressione lieve", 1),
+                ("2 - Nessun problema psicologico", 2)
+            ],
+            format_func=lambda x: x[0],
+            key="g8_q5"
+        )[1]
+
+        q6 = st.selectbox(
+            "6. Indice di Massa Corporea (IMC / BMI):",
+            [
+                ("0 - BMI < 19", 0),
+                ("1 - 19 ≤ BMI < 21", 1),
+                ("2 - 21 ≤ BMI < 23", 2),
+                ("3 - BMI ≥ 23", 3)
+            ],
+            format_func=lambda x: x[0],
+            key="g8_q6"
+        )[1]
+
+        q7 = st.selectbox(
+            "7. Assume più di 3 farmaci prescritti al giorno?",
+            [
+                ("0 - Sì", 0),
+                ("1 - No", 1)
+            ],
+            format_func=lambda x: x[0],
+            key="g8_q7"
+        )[1]
+
+        q8 = st.selectbox(
+            "8. Come giudica il suo stato di salute rispetto ai suoi coetanei?",
+            [
+                ("0 - Peggiore", 0),
+                ("0.5 - Non sa", 0.5),
+                ("1 - Uguale", 1),
+                ("2 - Migliore", 2)
+            ],
+            format_func=lambda x: x[0],
+            key="g8_q8"
+        )[1]
+
+    totale_g8 = q1 + q2 + q3 + q4 + q5 + q6 + q7 + q8
+    
+    st.write(f"**Punteggio Totale G8:** `{totale_g8} / 17`")
+    if totale_g8 <= 14:
+        st.error("⚠️ **Screening G8 Positivo (Score ≤ 14):** Paziente a rischio di fragilità. Indicata Valutazione Geriatrica Approfondita (CGA).")
+    else:
+        st.success("✅ **Screening G8 Negativo (Score > 14):** Paziente biologicamente robusto.")
+        
+    return totale_g8
+
 def render_modulo():
     st.title("🧬 Carcinoma Prostatico - Decision Support System")
 
@@ -235,6 +338,9 @@ def render_modulo():
 
         anamnesi = render_anamnesi_generale(prefix="prostata")
         anamnesi_ordinata_pdf = formatta_anamnesi_per_pdf(anamnesi)
+        
+        st.divider()
+        totale_g8 = render_g8_screening()
 
         st.divider()
         st.subheader("🔬 Dati Bioptici, Clinici e Imaging Iniziale (mpRMN)")
@@ -290,7 +396,7 @@ def render_modulo():
 
                 blocco_anamnesi_str = f"\nAnamnesi Generale:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
                 
-                dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_num}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}{blocco_anamnesi_str}"
+                dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_num}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}\n• Screening G8: {totale_g8}/17{blocco_anamnesi_str}"
 
                 dati_v = {
                     "data": str(datetime.today().date()),
@@ -311,6 +417,7 @@ def render_modulo():
                     "percorso_scelto": scelta_trattamento,
                     "ultimo_psa": psa_basale,
                     "data_ultimo_psa": str(data_psa_basale),
+                    "g8_score": totale_g8,
                     "visite": [dati_v]
                 }
                 
@@ -318,7 +425,7 @@ def render_modulo():
                 genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
                 salva_paziente_su_drive(nome_p, cognome_p, data_nascita_p, codice_paziente)
                 
-                note_pdf_list = [motivazione_stadiazione, f"Percorso assegnato: {scelta_trattamento}"]
+                note_pdf_list = [motivazione_stadiazione, f"Percorso assegnato: {scelta_trattamento}", f"Punteggio Screening G8: {totale_g8}/17"]
                 if gruppo_rischio == "Basso Rischio":
                     note_pdf_list.append(TESTO_BASSO_RISCHIO)
                 elif gruppo_rischio == "Rischio Intermedio Favorevole":
