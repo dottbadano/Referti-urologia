@@ -175,6 +175,19 @@ def calcola_timing_controllo(percorso, dati):
         }
     return {"rec_psa": "PSA + Visita tra 6 Mesi.", "alert": "Info standard."}
 
+def aggiorna_codice_auto():
+    nome = st.session_state.get("input_nome_prostata", "").strip()
+    cognome = st.session_state.get("input_cognome_prostata", "").strip()
+    if nome and cognome:
+        try:
+            st.session_state["id_prostata_generato"] = genera_codice_univoco(nome, cognome)
+        except Exception:
+            st.session_state["id_prostata_generato"] = hashlib.md5(f"{nome}{cognome}".encode()).hexdigest()[:8].upper()
+        st.session_state["input_id_prostata"] = st.session_state["id_prostata_generato"]
+    else:
+        st.session_state["id_prostata_generato"] = ""
+        st.session_state["input_id_prostata"] = ""
+
 def render_modulo():
     st.title("🧬 Carcinoma Prostatico - Decision Support System")
 
@@ -191,50 +204,30 @@ def render_modulo():
     if modalita == "1. Prima Visita: Inquadramento Bioptico & Rischio":
         st.subheader("📋 Inserimento Anagrafica Paziente (Nuovo Accesso)")
         
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            nome_p = st.text_input("Nome Paziente", key="input_nome_prostata")
-        with col_b:
-            cognome_p = st.text_input("Cognome Paziente", key="input_cognome_prostata")
-        
-        # Sincronizzazione dello stato per generare il codice appena nome o cognome cambiano
         if "id_prostata_generato" not in st.session_state:
             st.session_state["id_prostata_generato"] = ""
+        if "input_id_prostata" not in st.session_state:
+            st.session_state["input_id_prostata"] = ""
 
-        chiave_corrente = f"{nome_p.strip()}_{cognome_p.strip()}"
-        if "ultimo_input_anagrafica" not in st.session_state:
-            st.session_state["ultimo_input_anagrafica"] = ""
-
-        if chiave_corrente != st.session_state["ultimo_input_anagrafica"]:
-            st.session_state["ultimo_input_anagrafica"] = chiave_corrente
-            if nome_p.strip() and cognome_p.strip():
-                try:
-                    st.session_state["id_prostata_generato"] = genera_codice_univoco(nome_p, cognome_p)
-                except Exception:
-                    st.session_state["id_prostata_generato"] = hashlib.md5(f"{nome_p}{cognome_p}".encode()).hexdigest()[:8].upper()
-            else:
-                st.session_state["id_prostata_generato"] = ""
+        col_a, col_b, col_c = st.columns(3)
+        with col_a:
+            nome_p = st.text_input("Nome Paziente", key="input_nome_prostata", on_change=aggiorna_codice_auto)
+        with col_b:
+            cognome_p = st.text_input("Cognome Paziente", key="input_cognome_prostata", on_change=aggiorna_codice_auto)
 
         with col_c:
             col_sub1, col_sub2 = st.columns([2, 1])
             with col_sub1:
                 codice_paziente = st.text_input(
                     "Codice Univoco / ID", 
-                    value=st.session_state["id_prostata_generato"], 
                     key="input_id_prostata"
                 )
             with col_sub2:
                 st.write("") 
                 st.write("")
                 if st.button("🔄 Genera", key="btn_rigenera_prostata"):
-                    if nome_p.strip() and cognome_p.strip():
-                        try:
-                            st.session_state["id_prostata_generato"] = genera_codice_univoco(nome_p, cognome_p)
-                        except Exception:
-                            st.session_state["id_prostata_generato"] = hashlib.md5(f"{nome_p}{cognome_p}{datetime.now()}".encode()).hexdigest()[:8].upper()
-                        st.rerun()
-                    else:
-                        st.warning("Inserisci prima nome e cognome.")
+                    aggiorna_codice_auto()
+                    st.rerun()
 
         data_nascita_p = st.date_input("Data di Nascita", datetime(1960, 1, 1))
 
