@@ -67,7 +67,7 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
         c9 = st.checkbox("Epatopatia cronica lieve (+1)", key=f"{prefix}_c_epatica_lieve")
         c10 = st.checkbox("Diabete mellito senza danno d'organo (+1)", key=f"{prefix}_c_diabete_s")
         c11 = st.checkbox("Emiplegia o paraplegia (+2)", key=f"{prefix}_c_emiplegia")
-        c12 = st.checkbox("Insufficienza renale da moderata a severa (+2)", key=f"{prefix}_c_ renale")
+        c12 = st.checkbox("Insufficienza renale da moderata a severa (+2)", key=f"{prefix}_c_renale")
         c13 = st.checkbox("Diabete mellito con danno d'organo (+2)", key=f"{prefix}_c_diabete_d")
         c14 = st.checkbox("Tumore solido localizzato (+2)", key=f"{prefix}_c_tumore_loc")
         c15 = st.checkbox("Leucemia o linfoma (+2)", key=f"{prefix}_c_emopatia")
@@ -147,7 +147,7 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
         f_pros = st.checkbox("Prostata", key=f"{prefix}_f_pros")
         f_seno = st.checkbox("Seno", key=f"{prefix}_f_seno")
     with col_f2:
-        f_ panc = st.checkbox("Pancreas", key=f"{prefix}_f_panc")
+        f_panc = st.checkbox("Pancreas", key=f"{prefix}_f_panc")
         f_feg = st.checkbox("Fegato", key=f"{prefix}_f_feg")
     with col_f3:
         f_uter = st.checkbox("Utero / Endometrio", key=f"{prefix}_f_uter")
