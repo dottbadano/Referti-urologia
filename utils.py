@@ -353,7 +353,7 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
     return buffer.getvalue()
 doc.build(story)
     buffer.seek(0)
-    return buffer.getvalue()
+ return buffer.getvalue()
 
 def salva_paziente_su_drive(nome, cognome, data_nascita, codice_univoco):
     """
