@@ -12,7 +12,7 @@ from utils import (
     render_anamnesi_generale, 
     formatta_anamnesi_per_pdf,
 salva_paziente_su_drive
-    ELENCO_MESI
+  from utils import ELENCO_MESI
 )
 
 TESTO_BASSO_RISCHIO = (
