@@ -10,6 +10,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer
+import pandas as pd
 import requests
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
@@ -86,7 +87,7 @@ def genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_univoco):
       df_aggiornato = nuova_riga
     else:
       df = df[df["codice"].astype(str).str.strip() != str(codice_univoco)]
-      df_aggiornato = pd.concat([df, nueva_riga] if "nueva_riga" in locals() else [df, nuova_riga], ignore_index=True)
+      df_aggiornato = pd.concat([df, nuova_riga], ignore_index=True)
 
     conn.update(data=df_aggiornato)
     return True
@@ -396,7 +397,7 @@ def formatta_anamnesi_per_pdf(anamnesi):
 def genera_pdf_referto(
     codice_paziente, dati_visita, percorso, note_raccomandazioni, nome, cognome
 ):
-  """Funzione di generazione PDF strutturata con SimpleDocTemplate per il ritorno a capo automatico."""
+  """Funzione di generazione PDF strutturata con SimpleDocTemplate per il ritorno a capo automatico di qualsiasi visita o follow-up."""
   buffer = BytesIO()
 
   doc = SimpleDocTemplate(
@@ -469,9 +470,9 @@ def genera_pdf_referto(
   story.append(Spacer(1, 10))
 
   meta_lines = [
-      f"<b>Data Visita:</b> {dati_visita.get('data')}",
+      f"<b>Data Controllo / Visita:</b> {dati_visita.get('data')}",
       f"<b>Paziente:</b> {cognome} {nome} (ID: {codice_paziente})",
-      f"<b>Tipologia:</b> {dati_visita.get('tipo')}",
+      f"<b>Tipologia Protocollo:</b> {dati_visita.get('tipo')}",
   ]
   for ml in meta_lines:
     story.append(Paragraph(ml, style_meta))
@@ -489,7 +490,7 @@ def genera_pdf_referto(
 
   dettagli_testo = dati_visita.get("dettagli", "")
   if dettagli_testo:
-    story.append(Paragraph("Dettagli Clinici e Anamnesi:", style_h2))
+    story.append(Paragraph("Dettagli Clinici e Parametri di Follow-up:", style_h2))
     for line in dettagli_testo.split("\n"):
       if line.strip():
         story.append(Paragraph(line, style_body))
@@ -501,11 +502,14 @@ def genera_pdf_referto(
     story.append(Spacer(1, 6))
 
   if note_raccomandazioni:
-    story.append(Paragraph("Raccomandazioni e Note:", style_h2))
-    for rec in note_raccomandazioni:
-      if rec and rec.strip():
-        story.append(Paragraph(f"• {rec}", style_body))
-        story.append(Spacer(1, 4))
+    story.append(Paragraph("Raccomandazioni e Note Mediche:", style_h2))
+    if isinstance(note_raccomandazioni, list):
+      for rec in note_raccomandazioni:
+        if rec and str(rec).strip():
+          story.append(Paragraph(f"• {rec}", style_body))
+          story.append(Spacer(1, 4))
+    else:
+      story.append(Paragraph(str(note_raccomandazioni), style_body))
 
   doc.build(story)
   buffer.seek(0)
