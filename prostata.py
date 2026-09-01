@@ -193,31 +193,31 @@ def render_modulo():
         
         col_a, col_b, col_c = st.columns(3)
         with col_a:
-            nome_p = st.text_input("Nome Paziente", key="input_nome_prostata", on_change=st.rerun)
+            nome_p = st.text_input("Nome Paziente", key="input_nome_prostata")
         with col_b:
-            cognome_p = st.text_input("Cognome Paziente", key="input_cognome_prostata", on_change=st.rerun)
+            cognome_p = st.text_input("Cognome Paziente", key="input_cognome_prostata")
         
-        # Calcolo istantaneo del codice univoco basato sui campi di input
-        id_iniziale = ""
-        if nome_p.strip() and cognome_p.strip():
-            try:
-                id_iniziale = genera_codice_univoco(nome_p, cognome_p)
-            except Exception:
-                id_iniziale = hashlib.md5(f"{nome_p}{cognome_p}".encode()).hexdigest()[:8].upper()
+        # Gestione automatica e reattiva dell'ID basata sui campi di input
+        chiave_paziente_attuale = f"{nome_p.strip()}_{cognome_p.strip()}"
+        if "ultimo_input_anagrafica" not in st.session_state:
+            st.session_state["ultimo_input_anagrafica"] = ""
 
-        # Gestione forzatura manuale tramite pulsante
-        if "forzatura_id" in st.session_state and st.session_state.get("last_nome") == nome_p and st.session_state.get("last_cognome") == cognome_p:
-            id_iniziale = st.session_state["forzatura_id"]
-        else:
-            st.session_state["last_nome"] = nome_p
-            st.session_state["last_cognome"] = cognome_p
+        if chiave_paziente_attuale != st.session_state["ultimo_input_anagrafica"]:
+            st.session_state["ultimo_input_anagrafica"] = chiave_paziente_attuale
+            if nome_p.strip() and cognome_p.strip():
+                try:
+                    st.session_state["id_prostata_generato"] = genera_codice_univoco(nome_p, cognome_p)
+                except Exception:
+                    st.session_state["id_prostata_generato"] = hashlib.md5(f"{nome_p}{cognome_p}".encode()).hexdigest()[:8].upper()
+            else:
+                st.session_state["id_prostata_generato"] = ""
 
         with col_c:
             col_sub1, col_sub2 = st.columns([2, 1])
             with col_sub1:
                 codice_paziente = st.text_input(
                     "Codice Univoco / ID", 
-                    value=id_iniziale, 
+                    value=st.session_state.get("id_prostata_generato", ""), 
                     key="input_id_prostata"
                 )
             with col_sub2:
@@ -225,7 +225,7 @@ def render_modulo():
                 st.write("")
                 if st.button("🔄 Genera", key="btn_rigenera_prostata"):
                     if nome_p.strip() and cognome_p.strip():
-                        st.session_state["forzatura_id"] = hashlib.md5(f"{nome_p}{cognome_p}{datetime.now()}".encode()).hexdigest()[:8].upper()
+                        st.session_state["id_prostata_generato"] = hashlib.md5(f"{nome_p}{cognome_p}{datetime.now()}".encode()).hexdigest()[:8].upper()
                         st.rerun()
                     else:
                         st.warning("Inserisci nome e cognome.")
