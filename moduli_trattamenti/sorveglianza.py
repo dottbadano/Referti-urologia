@@ -1,14 +1,15 @@
-import streamlit as st
 from datetime import datetime
+import streamlit as st
+from utils import genera_pdf_referto, salva_db_pazienti
 
 def render_sorveglianza_attiva(paziente, db_attivo, codice_search):
-    """Modulo dedicato alla gestione e follow-up del protocollo di Sorveglianza Attiva con inserimento PSA, calcolo PSADT, mpRMN e biopsia confirmatoria."""
+    """Modulo dedicato alla gestione e follow-up del protocollo di Sorveglianza Attiva con inserimento PSA, calcolo PSADT, mpRMN e biopsia confirmatoria[cite: 6]."""
     st.markdown("### 🟢 Protocollo di Sorveglianza Attiva")
-    st.info("Gestione clinica per pazienti in monitoraggio attivo con obbligo di inserimento data per i valori di PSA, calcolo automatico del PSA Doubling Time (PSADT), referto mpRMN e biopsia a 12 mesi.")
+    st.info("Gestione clinica per pazienti in monitoraggio attivo con obbligo di inserimento data per i valori di PSA, calcolo automatico del PSA Doubling Time (PSADT), referto mpRMN e biopsia a 12 mesi[cite: 6].")
     
     with st.form(key="form_sorveglianza_attiva"):
         st.markdown("#### 📈 Monitoraggio PSA e Calcolo PSADT")
-        st.write("Inserire i dati dei dosaggi di PSA con relativo mese ed anno per consentire il calcolo automatico del tempo di raddoppio.")
+        st.write("Inserire i dati dei dosaggi di PSA con relativo mese ed anno per consentire il calcolo automatico del tempo di raddoppio[cite: 6].")
         
         col_psa1, col_psa2, col_psa3 = st.columns(3)
         with col_psa1:
@@ -31,7 +32,6 @@ def render_sorveglianza_attiva(paziente, db_attivo, codice_search):
         # Calcolo logico semplificato del PSADT se entrambi i valori sono validi
         psadt_valore = "Non calcolabile (dati insufficienti)"
         if valore_psa_attuale > 0 and valore_psa_prec > 0:
-            # Formula indicativa o stima base se c'è variazione
             if valore_psa_attuale > valore_psa_prec:
                 psadt_valore = "Variazione in incremento (richiede controllo e stima temporale fine)"
             else:
@@ -70,6 +70,22 @@ def render_sorveglianza_attiva(paziente, db_attivo, codice_search):
             if "visite" not in paziente:
                 paziente["visite"] = []
             paziente["visite"].append(dati_v_sa)
-            from utils import salva_db_pazienti
             salva_db_pazienti(db_attivo)
             st.success("Aggiornamento di Sorveglianza Attiva salvato correttamente!")
+
+            # Generazione immediata del PDF per la stampa
+            pdf_bytes = genera_pdf_referto(
+                codice_search, 
+                dati_v_sa, 
+                percorso="Monitoraggio in protocollo di Sorveglianza Attiva", 
+                note_raccomandazioni=[note_sa], 
+                nome=paziente['nome'], 
+                cognome=paziente['cognome']
+            )
+            st.download_button(
+                label="📥 Scarica Referto / Verbale in PDF",
+                data=pdf_bytes,
+                file_name=f"Report_Sorveglianza_{codice_search}_{datetime.today().date()}.pdf",
+                mime="application/pdf",
+                key="download_pdf_sorveglianza"
+            )
