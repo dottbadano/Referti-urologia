@@ -25,7 +25,7 @@ def genera_codice_univoco_organo(nome, cognome, organo_lettera="P"):
 def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
     """
     Modulo unificato per Anagrafica, ID automatico, Charlson pesato per età,
-    Allergie, G8 interattivo a tendina, ADL, IADL, ECOG, Mini-Mental, Familiarità ed Anamnesi Chirurgica/Farmacologica.
+    Antropometria (Peso, Altezza, BMI), Allergie, G8 interattivo a tendina, ADL, IADL, ECOG, Mini-Mental, Familiarità ed Anamnesi Chirurgica/Farmacologica.
     """
     st.markdown("### 📋 Anagrafica & Profilo Globale del Paziente")
     
@@ -49,7 +49,31 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
     with col_c:
         codice_paziente = st.text_input("Codice Univoco / ID (Autogenerato)", key=id_key)
 
-    data_nascita = st.date_input("Data di Nascita", datetime(1960, 1, 1), key=f"input_nascita_{prefix}")
+    col_d1, col_d2 = st.columns(2)
+    with col_d1:
+        data_nascita = st.date_input("Data di Nascita", datetime(1960, 1, 1), key=f"input_nascita_{prefix}")
+    with col_d2:
+        # Sezione Antropometrica (Peso e Altezza per calcolo BMI)
+        col_p, col_al = st.columns(2)
+        with col_p:
+            peso = st.number_input("Peso (kg)", min_value=30.0, max_value=250.0, value=75.0, step=0.5, key=f"input_peso_{prefix}")
+        with col_al:
+            altezza = st.number_input("Altezza (cm)", min_value=100.0, max_value=250.0, value=175.0, step=1.0, key=f"input_altezza_{prefix}")
+
+    # Calcolo automatico BMI
+    altezza_m = altezza / 100.0
+    bmi_valore = round(peso / (altezza_m ** 2), 1) if altezza_m > 0 else 0.0
+    
+    if bmi_valore < 18.5:
+        categoria_bmi = "Sottopeso"
+    elif 18.5 <= bmi_valore < 25.0:
+        categoria_bmi = "Normopeso"
+    elif 25.0 <= bmi_valore < 30.0:
+        categoria_bmi = "Sovrappeso"
+    else:
+        categoria_bmi = "Obesità"
+
+    st.info(f"⚖️ **BMI Calcolato:** `{bmi_valore}` ({categoria_bmi})")
     
     # Calcolo automatico età
     oggi = datetime.today().date()
@@ -303,6 +327,10 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
         "id_univoco": codice_paziente.strip(),
         "data_nascita": str(data_nascita),
         "eta": eta,
+        "peso": peso,
+        "altezza": altezza,
+        "bmi": bmi_valore,
+        "bmi_categoria": categoria_bmi,
         "charlson_score": cci_totale,
         "comorbidita_elenco": comorb_attive,
         "ha_allergie": ha_allergie,
@@ -324,6 +352,9 @@ def formatta_anamnesi_per_pdf_unificata(dati):
     """
     linee = []
     
+    if dati.get("bmi") and dati.get("bmi") > 0:
+        linee.append(f"• Parametri Antropometrici: Peso {dati.get('peso')} kg, Altezza {dati.get('altezza')} cm | BMI: {dati.get('bmi')} ({dati.get('bmi_categoria')})")
+        
     if dati.get("comorbidita_elenco"):
         linee.append(f"• Comorbilità (Charlson Score: {dati.get('charlson_score')}): {', '.join(dati['comorbidita_elenco'])}")
         
