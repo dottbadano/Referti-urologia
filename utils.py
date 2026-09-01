@@ -39,7 +39,6 @@ def carica_db_pazienti():
     except Exception as e:
         print(f"Errore nella lettura del database su Google Sheets: {e}")
         return {}
-
 def salva_db_pazienti(registro):
     """Mantenuta per compatibilità (la scrittura avviene direttamente in genera_o_aggiorna_registro)."""
     return True
