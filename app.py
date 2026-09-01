@@ -60,7 +60,7 @@ scelta_modulo = st.sidebar.radio(
     ]
 )
 
-# Caricamento moduli dinamico (Corretto "prostate" in "prostata")
+# Caricamento moduli dinamico
 if scelta_modulo == "🧬 Prostata":
     import prostata
     prostata.render_modulo()
