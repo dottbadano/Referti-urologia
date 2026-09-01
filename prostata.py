@@ -197,13 +197,16 @@ def render_modulo():
         with col_b:
             cognome_p = st.text_input("Cognome Paziente", key="input_cognome_prostata")
         
-        # Gestione automatica e reattiva dell'ID basata sui campi di input
-        chiave_paziente_attuale = f"{nome_p.strip()}_{cognome_p.strip()}"
+        # Sincronizzazione dello stato per generare il codice appena nome o cognome cambiano
+        if "id_prostata_generato" not in st.session_state:
+            st.session_state["id_prostata_generato"] = ""
+
+        chiave_corrente = f"{nome_p.strip()}_{cognome_p.strip()}"
         if "ultimo_input_anagrafica" not in st.session_state:
             st.session_state["ultimo_input_anagrafica"] = ""
 
-        if chiave_paziente_attuale != st.session_state["ultimo_input_anagrafica"]:
-            st.session_state["ultimo_input_anagrafica"] = chiave_paziente_attuale
+        if chiave_corrente != st.session_state["ultimo_input_anagrafica"]:
+            st.session_state["ultimo_input_anagrafica"] = chiave_corrente
             if nome_p.strip() and cognome_p.strip():
                 try:
                     st.session_state["id_prostata_generato"] = genera_codice_univoco(nome_p, cognome_p)
@@ -217,7 +220,7 @@ def render_modulo():
             with col_sub1:
                 codice_paziente = st.text_input(
                     "Codice Univoco / ID", 
-                    value=st.session_state.get("id_prostata_generato", ""), 
+                    value=st.session_state["id_prostata_generato"], 
                     key="input_id_prostata"
                 )
             with col_sub2:
@@ -225,10 +228,13 @@ def render_modulo():
                 st.write("")
                 if st.button("🔄 Genera", key="btn_rigenera_prostata"):
                     if nome_p.strip() and cognome_p.strip():
-                        st.session_state["id_prostata_generato"] = hashlib.md5(f"{nome_p}{cognome_p}{datetime.now()}".encode()).hexdigest()[:8].upper()
+                        try:
+                            st.session_state["id_prostata_generato"] = genera_codice_univoco(nome_p, cognome_p)
+                        except Exception:
+                            st.session_state["id_prostata_generato"] = hashlib.md5(f"{nome_p}{cognome_p}{datetime.now()}".encode()).hexdigest()[:8].upper()
                         st.rerun()
                     else:
-                        st.warning("Inserisci nome e cognome.")
+                        st.warning("Inserisci prima nome e cognome.")
 
         data_nascita_p = st.date_input("Data di Nascita", datetime(1960, 1, 1))
 
