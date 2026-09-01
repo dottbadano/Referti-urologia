@@ -25,7 +25,7 @@ def genera_codice_univoco_organo(nome, cognome, organo_lettera="P"):
 def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
     """
     Modulo unificato per Anagrafica, ID automatico, Charlson pesato per età,
-    Allergie, G8, ADL, IADL, ECOG, Mini-Mental, Familiarità ed Anamnesi Chirurgica/Farmacologica.
+    Allergie, G8 interattivo a tendina, ADL, IADL, ECOG, Mini-Mental, Familiarità ed Anamnesi Chirurgica/Farmacologica.
     """
     st.markdown("### 📋 Anagrafica & Profilo Globale del Paziente")
     
@@ -102,7 +102,7 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
         specifica_allergie = st.text_input("Specificare allergie (es. farmaci, lattice, mezzi di contrasto)", key=f"{prefix}_specifica_allergie")
 
     st.markdown("---")
-    st.markdown("### 🏃‍♂️ Riserva Biologica & Autonomia Funzionale (G8, ADL, IADL, ECOG)")
+    st.markdown("### 🏃‍♂️ Riserva Biologica & Autonomia Funzionale (ECOG, ADL, IADL)")
     
     col_r1, col_r2 = st.columns(2)
     with col_r1:
@@ -128,8 +128,110 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
             ["Non valutato", "Indipendente (8/8)", "Parzialmente dipendente (4-7/8)", "Fortemente dipendente (0-3/8)"],
             key=f"{prefix}_iadl"
         )
-        # G8 rapido integrato
-        g8_score = st.slider("Punteggio Screening G8 (Geriatric 8 / max 17):", 0, 17, 15, key=f"{prefix}_g8")
+
+    st.markdown("---")
+    st.markdown("### 📈 Screening Geriatrico G8 (Valutazione a 8 voci)")
+    
+    with st.expander("Compila le domande del test G8", expanded=False):
+        # 1. Riduzione dell'assunzione di cibo
+        g8_1_opt = st.selectbox(
+            "1. L'assunzione di cibo è diminuita negli ultimi 3 mesi a causa di perdita di appetito, problemi digestivi, difficoltà di masticazione o deglutizione?",
+            [
+                ("0 - Grave diminuzione dell'assunzione di cibo", 0),
+                ("1 - Moderata diminuzione dell'assunzione di cibo", 1),
+                ("2 - Nessuna diminuzione dell'assunzione di cibo", 2)
+            ],
+            format_func=lambda x: x[0],
+            key=f"{prefix}_g8_1"
+        )[1]
+
+        # 2. Perdita di peso recente
+        g8_2_opt = st.selectbox(
+            "2. Perdita di peso negli ultimi 3 mesi:",
+            [
+                ("0 - Perdita di peso superiore a 3 kg", 0),
+                ("1 - Non sa", 1),
+                ("2 - Perdita di peso tra 1 e 3 kg", 2),
+                ("3 - Nessuna perdita di peso", 3)
+            ],
+            format_func=lambda x: x[0],
+            key=f"{prefix}_g8_2"
+        )[1]
+
+        # 3. Mobilità
+        g8_3_opt = st.selectbox(
+            "3. Mobilità:",
+            [
+                ("0 - Costretto a letto o in sedia a rotelle", 0),
+                ("1 - Capace di uscire dal letto/sedia ma non si muove fuori casa", 1),
+                ("2 - Esce normalmente di casa", 2)
+            ],
+            format_func=lambda x: x[0],
+            key=f"{prefix}_g8_3"
+        )[1]
+
+        # 4. Malattia acuta o stress psicologico
+        g8_4_opt = st.selectbox(
+            "4. Ha avuto una malattia acuta o un forte stress psicologico negli ultimi 3 mesi?",
+            [
+                ("0 - Sì", 0),
+                ("2 - No", 2)
+            ],
+            format_func=lambda x: x[0],
+            key=f"{prefix}_g8_4"
+        )[1]
+
+        # 5. Problemi neuropsicologici
+        g8_5_opt = st.selectbox(
+            "5. Problemi neuropsicologici:",
+            [
+                ("0 - Demenza grave o depressione", 0),
+                ("1 - Demenża lieve", 1),
+                ("2 - Nessun problema psicologico", 2)
+            ],
+            format_func=lambda x: x[0],
+            key=f"{prefix}_g8_5"
+        )[1]
+
+        # 6. Indice di Massa Corporea (BMI)
+        g8_6_opt = st.selectbox(
+            "6. Indice di Massa Corporea (BMI = peso in kg / [altezza in m]^2):",
+            [
+                ("0 - BMI inferiore a 19", 0),
+                ("1 - BMI compreso tra 19 e 21", 1),
+                ("2 - BMI compreso tra 21 e 23", 2),
+                ("3 - BMI superiore a 23", 3)
+            ],
+            format_func=lambda x: x[0],
+            key=f"{prefix}_g8_6"
+        )[1]
+
+        # 7. Assunzione di farmaci
+        g8_7_opt = st.selectbox(
+            "7. Assume più di 3 farmaci al giorno prescritti?",
+            [
+                ("0 - Sì", 0),
+                ("1 - No", 1)
+            ],
+            format_func=lambda x: x[0],
+            key=f"{prefix}_g8_7"
+        )[1]
+
+        # 8. Autopercezione dello stato di salute
+        g8_8_opt = st.selectbox(
+            "8. Come valuta il proprio stato di salute in confronto a quello dei suoi coetanei?",
+            [
+                ("0 - Peggiore", 0),
+                ("0.5 - Non sa / Incerto", 0.5),
+                ("1 - Uguale", 1),
+                ("2 - Migliore", 2)
+            ],
+            format_func=lambda x: x[0],
+            key=f"{prefix}_g8_8"
+        )[1]
+
+    g8_score = g8_1_opt + g8_2_opt + g8_3_opt + g8_4_opt + g8_5_opt + g8_6_opt + g8_7_opt + g8_8_opt
+    st.info(f"📌 **Punteggio Totale G8 Calcolato:** `{g8_score}/17` (Valore di cut-off standard: normale > 14)")
 
     st.markdown("---")
     st.markdown("### 🧠 Valutazione Cognitiva (Opzionale)")
