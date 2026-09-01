@@ -177,155 +177,157 @@ def render_modulo():
     )
 
 if modalita == "1. Prima Visita: Inquadramento Bioptico & Rischio":
-        st.subheader("📋 Inserimento Anagrafica Paziente (Nuovo Accesso)")
-        
-        if "prostata_nome" not in st.session_state: st.session_state["prostata_nome"] = ""
-        if "prostata_cognome" not in st.session_state: st.session_state["prostata_cognome"] = ""
-        if "prostata_id" not in st.session_state: st.session_state["prostata_id"] = ""
-
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            nome_p = st.text_input("Nome Paziente", value=st.session_state["prostata_nome"], key="input_nome_prostata")
-        with col_b:
-            cognome_p = st.text_input("Cognome Paziente", value=st.session_state["prostata_cognome"], key="input_cognome_prostata")
-        
-        if nome_p != st.session_state["prostata_nome"] or cognome_p != st.session_state["prostata_cognome"]:
-            st.session_state["prostata_nome"] = nome_p
-            st.session_state["prostata_cognome"] = cognome_p
-            if nome_p.strip() and cognome_p.strip():
-                st.session_state["prostata_id"] = genera_codice_univoco(nome_p, cognome_p)
-            else:
-                st.session_state["prostata_id"] = ""
-            st.rerun()
-
-        with col_c:
-            col_sub1, col_sub2 = st.columns([2, 1])
-            with col_sub1:
-                codice_paziente = st.text_input(
-                    "Codice Univoco / ID", 
-                    value=st.session_state["prostata_id"], 
-                    key="input_id_prostata"
-                )
-                if codice_paziente != st.session_state["prostata_id"]:
-                    st.session_state["prostata_id"] = codice_paziente
-            with col_sub2:
-                st.write("") 
-                st.write("")
-                if st.button("🔄 Genera", key="btn_rigenera_prostata"):
-                    if st.session_state["prostata_nome"] and st.session_state["prostata_cognome"]:
-                        st.session_state["prostata_id"] = genera_codice_univoco(st.session_state["prostata_nome"], st.session_state["prostata_cognome"])
-                        st.rerun()
-                    else:
-                        st.warning("Inserisci nome e cognome.")
-
-        data_nascita_p = st.date_input("Data di Nascita", datetime(1960, 1, 1))
-
-        st.divider()
-
-        anamnesi = render_anamnesi_generale(prefix="prostata")
-        anamnesi_ordinata_pdf = formatta_anamnesi_per_pdf(anamnesi)
-
-        st.divider()
-        st.subheader("🔬 Dati Bioptici, Clinici e Imaging Iniziale (mpRMN)")
-
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            isup_basale = st.selectbox(
-                "ISUP Group Bioptico:",
-                ["ISUP 1 (Gleason 3+3)", "ISUP 2 (Gleason 3+4)", "ISUP 3 (Gleason 4+3)", "ISUP 4 (Gleason 4+4)", "ISUP 5 (Gleason 9-10)"]
-            )
-            isup_num = int(isup_basale.split()[1])
-            gleason_terziario = st.selectbox("Gleason Pattern Terziario:", ["Assente", "Pattern 4 Terziario", "Pattern 5 Terziario"])
-
-            col_m, col_y = st.columns(2)
-            with col_m:
-                mese_psa_b = st.selectbox("Mese PSA", ELENCO_MESI, index=datetime.today().month - 1)
-            with col_y:
-                anno_psa_b = st.number_input("Anno PSA", min_value=2000, max_value=2030, value=datetime.today().year)
-
-            num_mese_b = ELENCO_MESI.index(mese_psa_b) + 1
-            data_psa_basale = datetime(anno_psa_b, num_mese_b, 1).date()
-            psa_basale = st.number_input("PSA Basale (ng/ml)", value=6.5, step=0.1)
-
-        with col2:
-            ct_stage = st.selectbox(
-                "Stadio T Clinico:",
-                ["cT1c (Inapprezzabile)", "cT2a (≤ metà di un lobo)", "cT2b (> metà di un lobo)", "cT2c (Entrambi i lobi)", "cT3a (Extracapsulare)", "cT3b (Vescicole)", "cT4 (Fissato/Adiacenti)"]
-            )
-            rmn_pirads = st.selectbox("Reperto mpRMN Prostatica:", ["PI-RADS 3", "PI-RADS 4", "PI-RADS 5", "ECE / SVI Sospetta alla RMN", "Non Eseguita"])
-
-        with col3:
-            st.markdown("🎯 **Valutazione Rischio & Stadiazione**")
-            gruppo_rischio, necessita_stadiazione, motivazione_stadiazione = calcola_gruppo_rischio_eau(isup_num, psa_basale, ct_stage, gleason_terziario)
-            st.write(f"**Classe di Rischio / Stadio:** `{gruppo_rischio}`")
-            if necessita_stadiazione:
-                st.error("⚠️ **STADIAZIONE SISTEMICA INDICATA**")
-            else:
-                st.success("✅ **STADIAZIONE NON INDICATA AB INITIO**")
-
-        st.markdown("---")
-        scelta_trattamento = st.selectbox("Trattamento Concordato / Scelto:", ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia"]) if not necessita_stadiazione else "In attesa di Stadiazione (DMT II)"
-
-        if st.button("💾 Salvataggio & Genera Report PDF (Prostata)", type="primary"):
-            if not nome_p or not cognome_p or not codice_paziente:
-                st.error("Inserire Nome, Cognome e Codice Univoco del paziente.")
-            else:
-                # Invia i dati a Google Sheets in background
-                salva_paziente_su_drive(
-                    nome=nome_p,
-                    cognome=cognome_p,
-                    data_nascita=data_nascita,  # Assicurati che la variabile della data nel tuo form si chiami così (o cambiala con il nome corretto)
-                    codice_univoco=codice_paziente
-                )
-
-                blocco_anamnesi_str = f"\nAnamnesi Generale:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
-                
-                dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_num}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}{blocco_anamnesi_str}"
-
-                dati_v = {
-                    "data": str(datetime.today().date()),
-                    "tipo": "Visita I - Inquadramento Bioptico Carcinoma Prostatico",
-                    "dettagli": dettagli_str
-                }
-                
-                if "db_pazienti" not in st.session_state:
-                    st.session_state["db_pazienti"] = {}
-                    
-                st.session_state["db_pazienti"][codice_paziente] = {
-                    "organo": "PROSTATA",
-                    "nome": nome_p,
-                    "cognome": cognome_p,
-                    "isup": isup_num,
-                    "rischio": gruppo_rischio,
-                    "percorso_scelto": scelta_trattamento,
-                    "ultimo_psa": psa_basale,
-                    "data_ultimo_psa": str(data_psa_basale),
-                    "visite": [dati_v]
-                }
-             salva_db_pazienti(st.session_state["db_pazienti"])
-    genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
-    salva_paziente_su_drive(nome_p, cognome_p, data_nascita_p, codice_paziente)
-    note_pdf_list = [motivazione_stadiazione, f"Percorso assegnato: {scelta_trattamento}"]
-    if gruppo_rischio == "Basso Rischio":
-        note_pdf_list.append(TESTO_BASSO_RISCHIO)
-    elif gruppo_rischio == "Rischio Intermedio Favorevole":
-        note_pdf_list.append(TESTO_INTERMEDIO_FAVOREVOLE)
-    elif gruppo_rischio == "Rischio Intermedio Sfavorevole":
-        note_pdf_list.append(TESTO_INTERMEDIO_SFAVOREVOLE)
-    elif "Alto" in gruppo_rischio:
-        note_pdf_list.append(TESTO_ALTO_RISCHIO)
-    elif gruppo_rischio == "Localmente Avanzato":
-        note_pdf_list.append(TESTO_LOCALMENTE_AVANZATO)
-
-    pdf_bytes = genera_pdf_referto(codice_paziente, dati_v, scelta_trattamento, note_pdf_list, nome=nome_p, cognome=cognome_p)
-    st.success(f"Paziente salvato con successo! Codice: `{codice_paziente}`")
+    st.subheader("📋 Inserimento Anagrafica Paziente (Nuovo Accesso)")
     
-    st.download_button(
-        label="📄 Scarica Referto PDF Stampabile",
-        data=pdf_bytes,
-        file_name=f"Referto_PROSTATA_{cognome_p}_{nome_p}.pdf",
-        mime="application/pdf"
-    )
+    if "prostata_nome" not in st.session_state: st.session_state["prostata_nome"] = ""
+    if "prostata_cognome" not in st.session_state: st.session_state["prostata_cognome"] = ""
+    if "prostata_id" not in st.session_state: st.session_state["prostata_id"] = ""
+
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        nome_p = st.text_input("Nome Paziente", value=st.session_state["prostata_nome"], key="input_nome_prostata")
+    with col_b:
+        cognome_p = st.text_input("Cognome Paziente", value=st.session_state["prostata_cognome"], key="input_cognome_prostata")
+    
+    if nome_p != st.session_state["prostata_nome"] or cognome_p != st.session_state["prostata_cognome"]:
+        st.session_state["prostata_nome"] = nome_p
+        st.session_state["prostata_cognome"] = cognome_p
+        if nome_p.strip() and cognome_p.strip():
+            st.session_state["prostata_id"] = genera_codice_univoco(nome_p, cognome_p)
+        else:
+            st.session_state["prostata_id"] = ""
+        st.rerun()
+
+    with col_c:
+        col_sub1, col_sub2 = st.columns([2, 1])
+        with col_sub1:
+            codice_paziente = st.text_input(
+                "Codice Univoco / ID", 
+                value=st.session_state["prostata_id"], 
+                key="input_id_prostata"
+            )
+            if codice_paziente != st.session_state["prostata_id"]:
+                st.session_state["prostata_id"] = codice_paziente
+        with col_sub2:
+            st.write("") 
+            st.write("")
+            if st.button("🔄 Genera", key="btn_rigenera_prostata"):
+                if st.session_state["prostata_nome"] and st.session_state["prostata_cognome"]:
+                    st.session_state["prostata_id"] = genera_codice_univoco(st.session_state["prostata_nome"], st.session_state["prostata_cognome"])
+                    st.rerun()
+                else:
+                    st.warning("Inserisci nome e cognome.")
+
+    data_nascita_p = st.date_input("Data di Nascita", datetime(1960, 1, 1))
+
+    st.divider()
+
+    anamnesi = render_anamnesi_generale(prefix="prostata")
+    anamnesi_ordinata_pdf = formatta_anamnesi_per_pdf(anamnesi)
+
+    st.divider()
+    st.subheader("🔬 Dati Bioptici, Clinici e Imaging Iniziale (mpRMN)")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        isup_basale = st.selectbox(
+            "ISUP Group Bioptico:",
+            ["ISUP 1 (Gleason 3+3)", "ISUP 2 (Gleason 3+4)", "ISUP 3 (Gleason 4+3)", "ISUP 4 (Gleason 4+4)", "ISUP 5 (Gleason 9-10)"]
+        )
+        isup_num = int(isup_basale.split()[1])
+        gleason_terziario = st.selectbox("Gleason Pattern Terziario:", ["Assente", "Pattern 4 Terziario", "Pattern 5 Terziario"])
+
+        col_m, col_y = st.columns(2)
+        with col_m:
+            mese_psa_b = st.selectbox("Mese PSA", ELENCO_MESI, index=datetime.today().month - 1)
+        with col_y:
+            anno_psa_b = st.number_input("Anno PSA", min_value=2000, max_value=2030, value=datetime.today().year)
+
+        num_mese_b = ELENCO_MESI.index(mese_psa_b) + 1
+        data_psa_basale = datetime(anno_psa_b, num_mese_b, 1).date()
+        psa_basale = st.number_input("PSA Basale (ng/ml)", value=6.5, step=0.1)
+
+    with col2:
+        ct_stage = st.selectbox(
+            "Stadio T Clinico:",
+            ["cT1c (Inapprezzabile)", "cT2a (≤ metà di un lobo)", "cT2b (> metà di un lobo)", "cT2c (Entrambi i lobi)", "cT3a (Extracapsulare)", "cT3b (Vescicole)", "cT4 (Fissato/Adiacenti)"]
+        )
+        rmn_pirads = st.selectbox("Reperto mpRMN Prostatica:", ["PI-RADS 3", "PI-RADS 4", "PI-RADS 5", "ECE / SVI Sospetta alla RMN", "Non Eseguita"])
+
+    with col3:
+        st.markdown("🎯 **Valutazione Rischio & Stadiazione**")
+        gruppo_rischio, necessita_stadiazione, motivazione_stadiazione = calcola_gruppo_rischio_eau(isup_num, psa_basale, ct_stage, gleason_terziario)
+        st.write(f"**Classe di Rischio / Stadio:** `{gruppo_rischio}`")
+        if necessita_stadiazione:
+            st.error("⚠️ **STADIAZIONE SISTEMICA INDICATA**")
+        else:
+            st.success("✅ **STADIAZIONE NON INDICATA AB INITIO**")
+
+    st.markdown("---")
+    scelta_trattamento = st.selectbox("Trattamento Concordato / Scelto:", ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia"]) if not necessita_stadiazione else "In attesa di Stadiazione (DMT II)"
+
+    if st.button("💾 Salvataggio & Genera Report PDF (Prostata)", type="primary"):
+        if not nome_p or not cognome_p or not codice_paziente:
+            st.error("Inserire Nome, Cognome e Codice Univoco del paziente.")
+        else:
+            # Invia i dati a Google Sheets in background
+            salva_paziente_su_drive(
+                nome=nome_p,
+                cognome=cognome_p,
+                data_nascita=data_nascita_p,
+                codice_univoco=codice_paziente
+            )
+
+            blocco_anamnesi_str = f"\nAnamnesi Generale:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
+            
+            dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_num}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}{blocco_anamnesi_str}"
+
+            dati_v = {
+                "data": str(datetime.today().date()),
+                "tipo": "Visita I - Inquadramento Bioptico Carcinoma Prostatico",
+                "dettagli": dettagli_str
+            }
+            
+            if "db_pazienti" not in st.session_state:
+                st.session_state["db_pazienti"] = {}
+                
+            st.session_state["db_pazienti"][codice_paziente] = {
+                "organo": "PROSTATA",
+                "nome": nome_p,
+                "cognome": cognome_p,
+                "isup": isup_num,
+                "rischio": gruppo_rischio,
+                "percorso_scelto": scelta_trattamento,
+                "ultimo_psa": psa_basale,
+                "data_ultimo_psa": str(data_psa_basale),
+                "visite": [dati_v]
+            }
+            
+            salva_db_pazienti(st.session_state["db_pazienti"])
+            genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
+            salva_paziente_su_drive(nome_p, cognome_p, data_nascita_p, codice_paziente)
+            
+            note_pdf_list = [motivazione_stadiazione, f"Percorso assegnato: {scelta_trattamento}"]
+            if gruppo_rischio == "Basso Rischio":
+                note_pdf_list.append(TESTO_BASSO_RISCHIO)
+            elif gruppo_rischio == "Rischio Intermedio Favorevole":
+                note_pdf_list.append(TESTO_INTERMEDIO_FAVOREVOLE)
+            elif gruppo_rischio == "Rischio Intermedio Sfavorevole":
+                note_pdf_list.append(TESTO_INTERMEDIO_SFAVOREVOLE)
+            elif "Alto" in gruppo_rischio:
+                note_pdf_list.append(TESTO_ALTO_RISCHIO)
+            elif gruppo_rischio == "Localmente Avanzato":
+                note_pdf_list.append(TESTO_LOCALMENTE_AVANZATO)
+
+            pdf_bytes = genera_pdf_referto(codice_paziente, dati_v, scelta_trattamento, note_pdf_list, nome=nome_p, cognome=cognome_p)
+            st.success(f"Paziente salvato con successo! Codice: `{codice_paziente}`")
+            
+            st.download_button(
+                label="📄 Scarica Referto PDF Stampabile",
+                data=pdf_bytes,
+                file_name=f"Referto_PROSTATA_{cognome_p}_{nome_p}.pdf",
+                mime="application/pdf"
+            )
 
 elif modalita == "2. Seconda Visita / DMT: Referto Stadiazione & Decisione":
     st.subheader("📑 Seconda Visita / Inquadramento DMT")
@@ -352,93 +354,93 @@ elif modalita == "2. Seconda Visita / DMT: Referto Stadiazione & Decisione":
             esito_stadiazione = st.selectbox("Esito Imaging di Stadiazione (es. PET/TC PSMA):", ["Negativo per malattia a distanza", "Positivo per recidiva locale", "Positivo per linfonodi regionali/pelvici", "Positivo per M1 (distanza)"])
             nota_dmt = st.text_area("Note della Discussione Multidisciplinare (DMT):")
                 
-                if st.button("💾 Salva Seconda Visita & Genera PDF", type="primary"):
-                    dettagli_v2 = f"Esito Stadiazione: {esito_stadiazione}\nNote DMT: {nota_dmt}"
-                    dati_v = {
-                        "data": str(datetime.today().date()),
-                        "tipo": "Seconda Visita / DMT & Stadiazione",
-                        "dettagli": dettagli_v2
-                    }
-                    paziente["visite"].append(dati_v)
-                    salva_db_pazienti(db_attivo)
-                    
-                    pdf_bytes = genera_pdf_referto(codice_search, dati_v, paziente.get("percorso_scelto", "Non definito"), [esito_stadiazione, nota_dmt], nome=paziente.get('nome',''), cognome=paziente.get('cognome',''))
-                    st.success("Seconda visita salvata con successo!")
-                    st.download_button(
-                        label="📄 Scarica Referto Seconda Visita PDF",
-                        data=pdf_bytes,
-                        file_name=f"SecondaVisita_PROSTATA_{codice_search}.pdf",
-                        mime="application/pdf"
-                    )
-            else:
-                st.error("❌ Nessun paziente trovato con questo codice univoco. Verifica l'ID inserito.")
-
-    elif modalita == "3. Controllo Successivo / Follow-up PSA":
-        st.subheader("🔍 Richiama Paziente per Follow-up")
-        
-        codice_search = st.text_input("Inserisci Codice Univoco Paziente (Obbligatorio):", key="search_fu_prostata").strip().upper()
-
-        if not codice_search:
-            st.warning("⚠️ Inserisci il codice univoco del paziente per accedere al modulo di follow-up.")
-        else:
-            db_attivo = st.session_state.get("db_pazienti", {})
-            if codice_search in db_attivo:
-                paziente = db_attivo[codice_search]
-                st.success(f"Paziente Trovato: {paziente.get('cognome', '')} {paziente.get('nome', '')} (ID: {codice_search})")
+            if st.button("💾 Salva Seconda Visita & Genera PDF", type="primary"):
+                dettagli_v2 = f"Esito Stadiazione: {esito_stadiazione}\nNote DMT: {nota_dmt}"
+                dati_v = {
+                    "data": str(datetime.today().date()),
+                    "tipo": "Seconda Visita / DMT & Stadiazione",
+                    "dettagli": dettagli_v2
+                }
+                paziente["visite"].append(dati_v)
+                salva_db_pazienti(db_attivo)
                 
-                with st.expander("📂 Visualizza Storico Visite / Follow-up Precedenti", expanded=True):
-                    visite_prec = paziente.get("visite", [])
-                    for idx, v in enumerate(visite_prec, 1):
-                        st.markdown(f"**Controllo {idx} - Data: {v.get('data')} | Tipo: {v.get('tipo')}**")
-                        st.text(v.get('dettagli', 'Nessun dettaglio'))
-                        st.markdown("---")
+                pdf_bytes = genera_pdf_referto(codice_search, dati_v, paziente.get("percorso_scelto", "Non definito"), [esito_stadiazione, nota_dmt], nome=paziente.get('nome',''), cognome=paziente.get('cognome',''))
+                st.success("Seconda visita salvata con successo!")
+                st.download_button(
+                    label="📄 Scarica Referto Seconda Visita PDF",
+                    data=pdf_bytes,
+                    file_name=f"SecondaVisita_PROSTATA_{codice_search}.pdf",
+                    mime="application/pdf"
+                )
+        else:
+            st.error("❌ Nessun paziente trovato con questo codice univoco. Verifica l'ID inserito.")
 
-                percorso_attuale = paziente.get("percorso_scelto", "Sorveglianza Attiva")
+elif modalita == "3. Controllo Successivo / Follow-up PSA":
+    st.subheader("🔍 Richiama Paziente per Follow-up")
+    
+    codice_search = st.text_input("Inserisci Codice Univoco Paziente (Obbligatorio):", key="search_fu_prostata").strip().upper()
 
-                st.markdown("---")
-                col_psa1, col_psa2, col_psa3 = st.columns(3)
-                with col_psa1:
-                    mese_psa_a = st.selectbox("Mese Prelievo PSA", ELENCO_MESI, index=datetime.today().month - 1)
-                with col_psa2:
-                    anno_psa_a = st.number_input("Anno Prelievo PSA", min_value=2000, max_value=2030, value=datetime.today().year)
-                with col_psa3:
-                    psa_attuale = st.number_input("Valore PSA Sierico (ng/ml):", min_value=0.0, value=float(paziente.get("ultimo_psa", 0.0)), step=0.01)
+    if not codice_search:
+        st.warning("⚠️ Inserisci il codice univoco del paziente per accedere al modulo di follow-up.")
+    else:
+        db_attivo = st.session_state.get("db_pazienti", {})
+        if codice_search in db_attivo:
+            paziente = db_attivo[codice_search]
+            st.success(f"Paziente Trovato: {paziente.get('cognome', '')} {paziente.get('nome', '')} (ID: {codice_search})")
+            
+            with st.expander("📂 Visualizza Storico Visite / Follow-up Precedenti", expanded=True):
+                visite_prec = paziente.get("visite", [])
+                for idx, v in enumerate(visite_prec, 1):
+                    st.markdown(f"**Controllo {idx} - Data: {v.get('data')} | Tipo: {v.get('tipo')}**")
+                    st.text(v.get('dettagli', 'Nessun dettaglio'))
+                    st.markdown("---")
 
-                num_mese_a = ELENCO_MESI.index(mese_psa_a) + 1
-                data_psa_attuale = datetime(anno_psa_a, num_mese_a, 1).date()
-                psadt_calcolato = calcola_psadt(paziente.get("ultimo_psa"), paziente.get("data_ultimo_psa"), psa_attuale, data_psa_attuale)
+            percorso_attuale = paziente.get("percorso_scelto", "Sorveglianza Attiva")
 
-                if percorso_attuale == "Sorveglianza Attiva":
-                    res_fu = calcola_timing_controllo("Sorveglianza Attiva", {"isup": paziente.get("isup", 1), "psadt": psadt_calcolato})
-                elif percorso_attuale == "Chirurgia (Post-Prostatectomia)":
-                    res_fu = calcola_timing_controllo("Chirurgia (Post-Prostatectomia)", {"psa": psa_attuale, "mesi_post_op": 6})
-                else:
-                    res_fu = calcola_timing_controllo("Radioterapia", {"psa": psa_attuale, "psa_nadir": 0.1, "mesi_post_rt": 12})
+            st.markdown("---")
+            col_psa1, col_psa2, col_psa3 = st.columns(3)
+            with col_psa1:
+                mese_psa_a = st.selectbox("Mese Prelievo PSA", ELENCO_MESI, index=datetime.today().month - 1)
+            with col_psa2:
+                anno_psa_a = st.number_input("Anno Prelievo PSA", min_value=2000, max_value=2030, value=datetime.today().year)
+            with col_psa3:
+                psa_attuale = st.number_input("Valore PSA Sierico (ng/ml):", min_value=0.0, value=float(paziente.get("ultimo_psa", 0.0)), step=0.01)
 
-                st.info(f"**Indicazioni:** {res_fu['rec_psa']}")
+            num_mese_a = ELENCO_MESI.index(mese_psa_a) + 1
+            data_psa_attuale = datetime(anno_psa_a, num_mese_a, 1).date()
+            psadt_calcolato = calcola_psadt(paziente.get("ultimo_psa"), paziente.get("data_ultimo_psa"), psa_attuale, data_psa_attuale)
 
-                if st.button("💾 Salvataggio Visita & Genera PDF Controllo", type="primary"):
-                    paziente["ultimo_psa"] = psa_attuale
-                    paziente["data_ultimo_psa"] = str(data_psa_attuale)
-                    
-                    dati_v = {
-                        "data": str(datetime.today().date()),
-                        "tipo": f"Follow-up ({percorso_attuale}) Carcinoma Prostatico",
-                        "dettagli": f"PSA: {psa_attuale:.2f} ({mese_psa_a} {anno_psa_a}) | PSADT: {psadt_calcolato} mesi"
-                    }
-                    paziente["visite"].append(dati_v)
-                    salva_db_pazienti(db_attivo)
-                    
-                    note_pdf = [res_fu.get("rec_psa"), res_fu.get("rec_rmn"), res_fu.get("rec_bx"), res_fu.get("rec_imaging")]
-                    note_pdf = [n for n in note_pdf if n]
-                    
-                    pdf_bytes = genera_pdf_referto(codice_search, dati_v, percorso_attuale, note_pdf, nome=paziente.get('nome',''), cognome=paziente.get('cognome',''))
-                    st.success("Controllo registrato!")
-                    st.download_button(
-                        label="📄 Scarica Referto Follow-up PDF",
-                        data=pdf_bytes,
-                        file_name=f"FollowUp_PROSTATA_{codice_search}.pdf",
-                        mime="application/pdf"
-                    )
+            if percorso_attuale == "Sorveglianza Attiva":
+                res_fu = calcola_timing_controllo("Sorveglianza Attiva", {"isup": paziente.get("isup", 1), "psadt": psadt_calcolato})
+            elif percorso_attuale == "Chirurgia (Post-Prostatectomia)":
+                res_fu = calcola_timing_controllo("Chirurgia (Post-Prostatectomia)", {"psa": psa_attuale, "mesi_post_op": 6})
             else:
-                st.error("❌ Nessun paziente trovato con questo codice univoco. Verifica l'ID inserito.")
+                res_fu = calcola_timing_controllo("Radioterapia", {"psa": psa_attuale, "psa_nadir": 0.1, "mesi_post_rt": 12})
+
+            st.info(f"**Indicazioni:** {res_fu['rec_psa']}")
+
+            if st.button("💾 Salvataggio Visita & Genera PDF Controllo", type="primary"):
+                paziente["ultimo_psa"] = psa_attuale
+                paziente["data_ultimo_psa"] = str(data_psa_attuale)
+                
+                dati_v = {
+                    "data": str(datetime.today().date()),
+                    "tipo": f"Follow-up ({percorso_attuale}) Carcinoma Prostatico",
+                    "dettagli": f"PSA: {psa_attuale:.2f} ({mese_psa_a} {anno_psa_a}) | PSADT: {psadt_calcolato} mesi"
+                }
+                paziente["visite"].append(dati_v)
+                salva_db_pazienti(db_attivo)
+                
+                note_pdf = [res_fu.get("rec_psa"), res_fu.get("rec_rmn"), res_fu.get("rec_bx"), res_fu.get("rec_imaging")]
+                note_pdf = [n for n in note_pdf if n]
+                
+                pdf_bytes = genera_pdf_referto(codice_search, dati_v, percorso_attuale, note_pdf, nome=paziente.get('nome',''), cognome=paziente.get('cognome',''))
+                st.success("Controllo registrato!")
+                st.download_button(
+                    label="📄 Scarica Referto Follow-up PDF",
+                    data=pdf_bytes,
+                    file_name=f"FollowUp_PROSTATA_{codice_search}.pdf",
+                    mime="application/pdf"
+                )
+        else:
+            st.error("❌ Nessun paziente trovato con questo codice univoco. Verifica l'ID inserito.")
