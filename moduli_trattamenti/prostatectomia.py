@@ -571,3 +571,7 @@ def render_modulo():
                     )
             else:
                 st.error("❌ Nessun paziente trovato con questo codice univoco.")
+
+def render_prostatectomia():
+    """Funzione wrapper aggiunta per risolvere l'errore di importazione da app.py"""
+    render_modulo()
