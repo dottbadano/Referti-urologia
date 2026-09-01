@@ -1,10 +1,11 @@
-import streamlit as st
 from datetime import datetime
+import streamlit as st
+from utils import genera_pdf_referto, salva_db_pazienti
 
 def render_terapia_medica(paziente, db_attivo, codice_search):
-    """Modulo dedicato alla gestione e follow-up della Terapia Medica (ormonale, ARSI, chemioterapia e PARPi)."""
+    """Modulo dedicato alla gestione e follow-up della Terapia Medica (ormonale, ARSI, chemioterapia e PARPi)[cite: 6]."""
     st.markdown("### 🟡 Protocollo di Terapia Medica Avanzata")
-    st.info("Gestione della malattia metastatica o avanzata, definizione del volume tumorale (Criteri CHAARTED/STAMPEDE), terapie sistemiche (LH-RH, ARSI, chemioterapia), mutazioni BRCA e target therapy (PARPi), con monitoraggio di PSA e testosteronemia.")
+    st.info("Gestione della malattia metastatica o avanzata, definizione del volume tumorale (Criteri CHAARTED/STAMPEDE), terapie sistemiche (LH-RH, ARSI, chemioterapia), mutazioni BRCA e target therapy (PARPi), con monitoraggio di PSA e testosteronemia[cite: 6].")
     
     with st.form(key="form_terapia_medica"):
         st.markdown("#### 🌍 Caratteristiche di Malattia e Volume (Criteri CHAARTED / STAMPEDE)")
@@ -96,6 +97,22 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
             if "visite" not in paziente:
                 paziente["visite"] = []
             paziente["visite"].append(dati_v_tm)
-            from utils import salva_db_pazienti
             salva_db_pazienti(db_attivo)
             st.success("Dati di terapia medica salvati correttamente!")
+
+            # Generazione immediata del PDF per la stampa
+            pdf_bytes = genera_pdf_referto(
+                codice_search, 
+                dati_v_tm, 
+                percorso="Monitoraggio in protocollo di Terapia Medica Avanzata", 
+                note_raccomandazioni=[note_tm], 
+                nome=paziente['nome'], 
+                cognome=paziente['cognome']
+            )
+            st.download_button(
+                label="📥 Scarica Referto / Verbale in PDF",
+                data=pdf_bytes,
+                file_name=f"Report_TerapiaMedica_{codice_search}_{datetime.today().date()}.pdf",
+                mime="application/pdf",
+                key="download_pdf_terapia_medica"
+            )
