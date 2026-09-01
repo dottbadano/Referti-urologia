@@ -1,5 +1,6 @@
-import streamlit as st
 from datetime import datetime
+import streamlit as st
+from utils import genera_pdf_referto, salva_db_pazienti
 
 def render_prostatectomia(paziente, db_attivo, codice_search):
     """Modulo dedicato alla gestione e follow-up dopo Prostatectomia Radicale."""
@@ -70,6 +71,22 @@ def render_prostatectomia(paziente, db_attivo, codice_search):
             if "visite" not in paziente:
                 paziente["visite"] = []
             paziente["visite"].append(dati_v_px)
-            from utils import salva_db_pazienti
             salva_db_pazienti(db_attivo)
             st.success("Dati post-prostatectomia salvati correttamente!")
+
+            # Generazione immediata del PDF per la stampa
+            pdf_bytes = genera_pdf_referto(
+                codice_search, 
+                dati_v_px, 
+                percorso="Monitoraggio post-prostatectomia radicale", 
+                note_raccomandazioni=[note_px], 
+                nome=paziente['nome'], 
+                cognome=paziente['cognome']
+            )
+            st.download_button(
+                label="📥 Scarica Referto / Verbale in PDF",
+                data=pdf_bytes,
+                file_name=f"Report_Prostatectomia_{codice_search}_{datetime.today().date()}.pdf",
+                mime="application/pdf",
+                key="download_pdf_prostatectomia"
+            )
