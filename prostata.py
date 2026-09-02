@@ -80,14 +80,37 @@ TESTO_LOCALMENTE_AVANZATO = (
 )
 
 def ottieni_db_aggiornato():
-    """Ricarica il DB da file se necessario e sincronizza st.session_state."""
     db_file = carica_db_pazienti()
     if "db_pazienti" not in st.session_state:
         st.session_state["db_pazienti"] = db_file
     else:
-        # Fonde i dati aggiornati
         st.session_state["db_pazienti"].update(db_file)
     return st.session_state["db_pazienti"]
+
+def stima_aspettativa_vita_charlson(data_nascita, charlson_score):
+    """
+    Stima orientativa dell'aspettativa di vita basata su tabelle di mortalità generale integrate
+    con il Charlson Comorbidity Index (CCI).
+    """
+    eta = (datetime.today().date() - data_nascita).days // 365
+    
+    # Stima di base della sopravvivenza media residua in base all'età (Italia/ISTAT approx)
+    if eta < 60:
+        base_anni = 25
+    elif eta < 65:
+        base_anni = 20
+    elif eta < 70:
+        base_anni = 15
+    elif eta < 75:
+        base_anni = 11
+    elif eta < 80:
+        base_anni = 8
+    else:
+        base_anni = 5
+        
+    # Riduzione stimata per comorbidità (circa 2-3 anni persi per ogni punto di Charlson corretto)
+    aspettativa_stimata = max(1, base_anni - (charlson_score * 2.5))
+    return round(aspettativa_stimata, 1), eta
 
 def calcola_psadt(psa_precedente, data_precedente_str, psa_attuale, data_attuale):
     if psa_precedente is None or psa_precedente <= 0 or psa_attuale <= psa_precedente or not data_precedente_str:
@@ -150,7 +173,7 @@ def calcola_timing_controllo(percorso, dati):
             "rec_psa": "PSA Sierico Ultrasensibile di controllo semestrale + Visita Urologica.",
             "rec_imaging": "Imaging non indicato di routine in assenza di incremento del PSA.",
             "rec_azione": "Proseguire follow-up oncologico regolare.",
-            "alert": "🟢 PSA nei limits di negatività (<0.20 ng/ml).",
+            "alert": "🟢 PSA nei limiti di negatività (<0.20 ng/ml).",
         }
     elif percorso == "Radioterapia":
         psa = dati.get("psa", 0.0)
@@ -180,7 +203,6 @@ def calcola_timing_controllo(percorso, dati):
 def render_modulo():
     st.title("🧬 Carcinoma Prostatico - Decision Support System")
 
-    # Inizializzazione e recupero DB sempre aggiornato
     db_attivo = ottieni_db_aggiornato()
 
     modalita = st.radio(
@@ -200,14 +222,33 @@ def render_modulo():
         
         nome_p = paziente_info["nome"]
         cognome_p = paziente_info["cognome"]
-        # Normalizzazione in MAIUSCOLO del codice univoco
         codice_paziente = str(paziente_info["id_univoco"]).strip().upper()
         data_nascita_p = datetime.strptime(paziente_info["data_nascita"], "%Y-%m-%d").date()
         totale_g8 = paziente_info["g8_score"]
+        charlson_score = paziente_info["charlson_score"]
         
+        # Stima dell'aspettativa di vita in base all'età e al Charlson Score corretto
+        aspettativa_vita, eta_paziente = stima_aspettativa_vita_charlson(data_nascita_p, charlson_score)
+
+        # BOX ALERT EVIDENTE PER ASPETTATIVA DI VITA < 10 ANNI
+        st.markdown("---")
+        if aspettativa_vita < 10.0:
+            st.error(
+                f"🚨 **ATTENZIONE CLINICA CRITICA (Aspettativa di Vita Stimata: < 10 Anni | Età: {eta_paziente} aa, Charlson Corretto: {charlson_score})**\n\n"
+                f"L'aspettativa di vita residua stimata è inferiore a 10 anni. "
+                f"In conformità alle Linee Guida oncologiche internazionali, **NON SUSSISTE INDICAZIONE A TRATTAMENTI CHIRURGICI AGGRESSIVI O A FINALITÀ RADICALE** (es. Prostatectomia Radicale), "
+                f"poiché i rischi operatori e la mortalità non correlata al cancro superano il beneficio atteso. "
+                f"Si raccomanda di orientare la scelta clinica verso protocolli di osservazione, sorveglianza conservativa o trattamenti palliativi/di supporto."
+            )
+        else:
+            st.success(
+                f"✅ **Valutazione Aspettativa di Vita:** Stimata a **~{aspettativa_vita} anni** (Età: {eta_paziente} aa, Charlson Corretto: {charlson_score}). "
+                f"Il paziente rientra nei criteri di idoneità per trattamenti a finalità radicale."
+            )
+        st.markdown("---")
+
         anamnesi_ordinata_pdf = formatta_anamnesi_per_pdf_unificata(paziente_info)
 
-        st.divider()
         st.subheader("🔬 Dati Bioptici, Clinici e Imaging Iniziale (mpRMN)")
 
         col1, col2, col3 = st.columns(3)
@@ -246,7 +287,18 @@ def render_modulo():
                 st.success("✅ **STADIAZIONE NON INDICATA AB INITIO**")
 
         st.markdown("---")
-        scelta_trattamento = st.selectbox("Trattamento Proposto / Concordato:", ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia", "Terapia Medica / Ormonale"]) if not necessita_stadiazione else "In attesa di Stadiazione (DMT)"
+        
+        # LOGICA AGGIORNATA PER LE OPZIONI TERAPEUTICHE:
+        # Se Basso Rischio o Rischio Intermedio Favorevole -> NON mostrare Terapia Medica tra le opzioni iniziali
+        if necessita_stadiazione:
+            opzioni_trattamento = ["In attesa di Stadiazione (DMT)"]
+        else:
+            if gruppo_rischio in ["Basso Rischio", "Rischio Intermedio Favorevole"]:
+                opzioni_trattamento = ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia"]
+            else:
+                opzioni_trattamento = ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia", "Terapia Medica / Ormonale"]
+
+        scelta_trattamento = st.selectbox("Trattamento Proposto / Concordato:", opzioni_trattamento)
 
         if st.button("💾 Salvataggio & Genera Report PDF (Prima Visita)", type="primary"):
             if not nome_p or not cognome_p or not codice_paziente:
@@ -260,7 +312,7 @@ def render_modulo():
                 )
 
                 blocco_anamnesi_str = f"\nAnamnesi e Profilo Clinico:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
-                dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_basale}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}\n• Charlson Index (Corretto): {paziente_info['charlson_score']}\n• Screening G8: {totale_g8}/17{blocco_anamnesi_str}"
+                dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_basale}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}\n• Charlson Index (Corretto): {charlson_score}\n• Aspettativa di Vita Stimata: ~{aspettativa_vita} anni\n• Screening G8: {totale_g8}/17{blocco_anamnesi_str}"
 
                 dati_v = {
                     "data": str(datetime.today().date()),
@@ -268,7 +320,6 @@ def render_modulo():
                     "dettagli": dettagli_str
                 }
                 
-                # Salvataggio nel dizionario condiviso e in session_state
                 db_attivo[codice_paziente] = {
                     "organo": "PROSTATA",
                     "nome": nome_p,
@@ -294,7 +345,16 @@ def render_modulo():
             cod_salvato = st.session_state["ultimo_paziente_salvato_prostata"]
             paz_corrente = db_attivo[cod_salvato]
             
-            note_pdf_list = [motivazione_stadiazione, f"Percorso assegnato: {scelta_trattamento}", f"Punteggio Screening G8: {totale_g8}/17", f"Charlson Index corretto: {paziente_info['charlson_score']}"]
+            note_pdf_list = [
+                motivazione_stadiazione, 
+                f"Percorso assegnato: {scelta_trattamento}", 
+                f"Punteggio Screening G8: {totale_g8}/17", 
+                f"Charlson Index corretto: {charlson_score}",
+                f"Aspettativa di vita stimata: ~{aspettativa_vita} anni"
+            ]
+            if aspettativa_vita < 10.0:
+                note_pdf_list.append("ATTENZIONE CLINICA: Aspettativa di vita stimata < 10 anni. Non indicazione a chirurgia radicale.")
+            
             if anamnesi_ordinata_pdf:
                 note_pdf_list.append(f"Anamnesi:\n{anamnesi_ordinata_pdf}")
 
@@ -321,9 +381,7 @@ def render_modulo():
     elif modalita == "2. Rivalutazione dopo Stadiazione & Scelta Trattamento":
         st.subheader("📑 Rivalutazione post-Stadiazione (DMT) & Selezione Trattamento Definitivo")
         
-        # Sincronizza sempre il DB prima di cercare
         db_attivo = ottieni_db_aggiornato()
-        
         codice_search = st.text_input("Inserisci Codice Univoco Paziente:", key="search_dmt_prostata").strip().upper()
         
         if not codice_search:
@@ -351,16 +409,13 @@ def render_modulo():
                     ]
                 )
                 
-                nuovo_trattamento = st.selectbox(
-                    "Selezione Trattamento Definitivo Concordato:",
-                    [
-                        "Sorveglianza Attiva",
-                        "Chirurgia (Post-Prostatectomia)",
-                        "Radioterapia",
-                        "Terapia Medica / Ormonale (ADT / NHA)"
-                    ]
-                )
-                
+                rischio_paz = paziente.get("rischio", "")
+                if rischio_paz in ["Basso Rischio", "Rischio Intermedio Favorevole"]:
+                    opzioni_definitivo = ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia"]
+                else:
+                    opzioni_definitivo = ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia", "Terapia Medica / Ormonale (ADT / NHA)"]
+
+                nuovo_trattamento = st.selectbox("Selezione Trattamento Definitivo Concordato:", opzioni_definitivo)
                 nota_dmt = st.text_area("Note della Discussione Multidisciplinare (DMT) / Motivazione clinica:")
                     
                 if st.button("💾 Salva Rivalutazione & Genera Referto DMT", type="primary"):
@@ -396,14 +451,12 @@ def render_modulo():
                         mime="application/pdf"
                     )
             else:
-                st.error(f"❌ Nessun paziente trovato con il codice univoco `{codice_search}`. Sfoglia l'elenco o verifica l'inserimento.")
+                st.error(f"❌ Nessun paziente trovato con il codice univoco `{codice_search}`.")
 
     elif modalita == "3. Follow-up Dedicato (Post-Trattamento / Sorveglianza)":
         st.subheader("🔍 Gestione Follow-up Clinico Dedicato")
         
-        # Sincronizza sempre il DB prima di cercare
         db_attivo = ottieni_db_aggiornato()
-        
         codice_search = st.text_input("Inserisci Codice Univoco Paziente:", key="search_fu_prostata").strip().upper()
 
         if not codice_search:
@@ -477,7 +530,7 @@ def render_modulo():
                     salva_db_pazienti(db_attivo)
                     st.session_state["db_pazienti"] = db_attivo
                     st.session_state["ultimo_paziente_fu_prostata"] = codice_search
-                    st.success("Controllo di follow-up registrato e salvato nel database!")
+                    st.success("Controllo di follow-up registrato e salvato con successo nel database!")
 
                 if "ultimo_paziente_fu_prostata" in st.session_state and st.session_state["ultimo_paziente_fu_prostata"] == codice_search:
                     paz_aggiornato = db_attivo[codice_search]
