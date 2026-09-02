@@ -1,4 +1,5 @@
 from datetime import datetime
+import math
 import streamlit as st
 from utils import (
     carica_db_pazienti,
@@ -237,9 +238,9 @@ def render_modulo():
                 st.success("✅ **STADIAZIONE NON INDICATA AB INITIO**")
 
         st.markdown("---")
-        # Scelta opzionale immediata se non serve stadiazione, altrimenti bloccato in attesa
         scelta_trattamento = st.selectbox("Trattamento Proposto / Concordato:", ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia", "Terapia Medica / Ormonale"]) if not necessita_stadiazione else "In attesa di Stadiazione (DMT)"
 
+        # Pulsante di salvataggio indipendente e immediato
         if st.button("💾 Salvataggio & Genera Report PDF (Prima Visita)", type="primary"):
             if not nome_p or not cognome_p or not codice_paziente:
                 st.error("Inserire Nome, Cognome e Codice Univoco del paziente.")
@@ -277,30 +278,38 @@ def render_modulo():
                 salva_db_pazienti(db_attivo)
                 genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
                 
-                note_pdf_list = [motivazione_stadiazione, f"Percorso assegnato: {scelta_trattamento}", f"Punteggio Screening G8: {totale_g8}/17", f"Charlson Index corretto: {paziente_info['charlson_score']}"]
-                if anamnesi_ordinata_pdf:
-                    note_pdf_list.append(f"Anamnesi:\n{anamnesi_ordinata_pdf}")
+                # Salviamo lo stato in sessione per permettere il download del PDF in sicurezza
+                st.session_state["ultimo_paziente_salvato_prostata"] = codice_paziente
+                st.success(f"Paziente salvato con successo nel database! Codice univoco generato: `{codice_paziente}`")
 
-                if gruppo_rischio == "Basso Rischio":
-                    note_pdf_list.append(TESTO_BASSO_RISCHIO)
-                elif gruppo_rischio == "Rischio Intermedio Favorevole":
-                    note_pdf_list.append(TESTO_INTERMEDIO_FAVOREVOLE)
-                elif gruppo_rischio == "Rischio Intermedio Sfavorevole":
-                    note_pdf_list.append(TESTO_INTERMEDIO_SFAVOREVOLE)
-                elif "Alto" in gruppo_rischio:
-                    note_pdf_list.append(TESTO_ALTO_RISCHIO)
-                elif gruppo_rischio == "Localmente Avanzato":
-                    note_pdf_list.append(TESTO_LOCALMENTE_AVANZATO)
+        # Se il paziente è stato salvato o esiste in sessione, rendiamo disponibile il download del PDF in autonomia
+        if "ultimo_paziente_salvato_prostata" in st.session_state and st.session_state["ultimo_paziente_salvato_prostata"] in db_attivo:
+            cod_salvato = st.session_state["ultimo_paziente_salvato_prostata"]
+            paz_corrente = db_attivo[cod_salvato]
+            
+            note_pdf_list = [motivazione_stadiazione, f"Percorso assegnato: {scelta_trattamento}", f"Punteggio Screening G8: {totale_g8}/17", f"Charlson Index corretto: {paziente_info['charlson_score']}"]
+            if anamnesi_ordinata_pdf:
+                note_pdf_list.append(f"Anamnesi:\n{anamnesi_ordinata_pdf}")
 
-                pdf_bytes = genera_pdf_referto(codice_paziente, dati_v, scelta_trattamento, note_pdf_list, nome=nome_p, cognome=cognome_p)
-                st.success(f"Paziente salvato con successo! Codice univoco generato: `{codice_paziente}`")
-                
-                st.download_button(
-                    label="📄 Scarica Referto Prima Visita PDF",
-                    data=pdf_bytes,
-                    file_name=f"Referto_PROSTATA_{cognome_p}_{nome_p}.pdf",
-                    mime="application/pdf"
-                )
+            if gruppo_rischio == "Basso Rischio":
+                note_pdf_list.append(TESTO_BASSO_RISCHIO)
+            elif gruppo_rischio == "Rischio Intermedio Favorevole":
+                note_pdf_list.append(TESTO_INTERMEDIO_FAVOREVOLE)
+            elif gruppo_rischio == "Rischio Intermedio Sfavorevole":
+                note_pdf_list.append(TESTO_INTERMEDIO_SFAVOREVOLE)
+            elif "Alto" in gruppo_rischio:
+                note_pdf_list.append(TESTO_ALTO_RISCHIO)
+            elif gruppo_rischio == "Localmente Avanzato":
+                note_pdf_list.append(TESTO_LOCALMENTE_AVANZATO)
+
+            pdf_bytes = genera_pdf_referto(cod_salvato, paz_corrente["visite"][-1], scelta_trattamento, note_pdf_list, nome=paz_corrente['nome'], cognome=paz_corrente['cognome'])
+            
+            st.download_button(
+                label="📄 Scarica Referto Prima Visita PDF",
+                data=pdf_bytes,
+                file_name=f"Referto_PROSTATA_{paz_corrente['cognome']}_{paz_corrente['nome']}.pdf",
+                mime="application/pdf"
+            )
 
     elif modalita == "2. Rivalutazione dopo Stadiazione & Scelta Trattamento":
         st.subheader("📑 Rivalutazione post-Stadiazione (DMT) & Selezione Trattamento Definitivo")
@@ -355,16 +364,20 @@ def render_modulo():
                     }
                     paziente["visite"].append(dati_v)
                     salva_db_pazienti(db_attivo)
-                    
+                    st.session_state["ultimo_paziente_rivalutato_prostata"] = codice_search
+                    st.success("Rivalutazione e scelta terapeutica salvate con successo nel database!")
+
+                if "ultimo_paziente_rivalutato_prostata" in st.session_state and st.session_state["ultimo_paziente_rivalutato_prostata"] == codice_search:
+                    paz_aggiornato = db_attivo[codice_search]
+                    ultima_visita = paz_aggiornato["visite"][-1]
                     pdf_bytes = genera_pdf_referto(
                         codice_search, 
-                        dati_v, 
-                        nuovo_trattamento, 
+                        ultima_visita, 
+                        paz_aggiornato.get("percorso_scelto", nuovo_trattamento), 
                         [esito_stadiazione, nota_dmt], 
-                        nome=paziente.get('nome',''), 
-                        cognome=paziente.get('cognome','')
+                        nome=paz_aggiornato.get('nome',''), 
+                        cognome=paz_aggiornato.get('cognome','')
                     )
-                    st.success("Rivalutazione e scelta terapeutica salvate con successo!")
                     st.download_button(
                         label="📄 Scarica Referto Rivalutazione / DMT PDF",
                         data=pdf_bytes,
@@ -408,7 +421,6 @@ def render_modulo():
                 data_psa_attuale = datetime(anno_psa_a, num_mese_a, 1).date()
                 psadt_calcolato = calcola_psadt(paziente.get("ultimo_psa"), paziente.get("data_ultimo_psa"), psa_attuale, data_psa_attuale)
 
-                # Formattazione dedicata in base al percorso attivo
                 if percorso_attuale == "Sorveglianza Attiva":
                     res_fu = calcola_timing_controllo("Sorveglianza Attiva", {"isup": paziente.get("isup", 1), "psadt": psadt_calcolato})
                 elif percorso_attuale == "Chirurgia (Post-Prostatectomia)":
@@ -449,6 +461,12 @@ def render_modulo():
                     }
                     paziente["visite"].append(dati_v)
                     salva_db_pazienti(db_attivo)
+                    st.session_state["ultimo_paziente_fu_prostata"] = codice_search
+                    st.success("Controllo di follow-up registrato e salvato con successo nel database!")
+
+                if "ultimo_paziente_fu_prostata" in st.session_state and st.session_state["ultimo_paziente_fu_prostata"] == codice_search:
+                    paz_aggiornato = db_attivo[codice_search]
+                    ultima_visita = paz_aggiornato["visite"][-1]
                     
                     note_pdf = [
                         res_fu.get("alert"), 
@@ -461,8 +479,7 @@ def render_modulo():
                     ]
                     note_pdf = [n for n in note_pdf if n]
                     
-                    pdf_bytes = genera_pdf_referto(codice_search, dati_v, percorso_attuale, note_pdf, nome=paziente.get('nome',''), cognome=paziente.get('cognome',''))
-                    st.success("Controllo di follow-up registrato con successo!")
+                    pdf_bytes = genera_pdf_referto(codice_search, ultima_visita, percorso_attuale, note_pdf, nome=paz_aggiornato.get('nome',''), cognome=paz_aggiornato.get('cognome',''))
                     st.download_button(
                         label="📄 Scarica Referto Follow-up PDF",
                         data=pdf_bytes,
