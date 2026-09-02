@@ -79,6 +79,16 @@ TESTO_LOCALMENTE_AVANZATO = (
     "Il piano di cura definitivo sarà definito in stretta alleanza terapeutica con il paziente."
 )
 
+def ottieni_db_aggiornato():
+    """Ricarica il DB da file se necessario e sincronizza st.session_state."""
+    db_file = carica_db_pazienti()
+    if "db_pazienti" not in st.session_state:
+        st.session_state["db_pazienti"] = db_file
+    else:
+        # Fonde i dati aggiornati
+        st.session_state["db_pazienti"].update(db_file)
+    return st.session_state["db_pazienti"]
+
 def calcola_psadt(psa_precedente, data_precedente_str, psa_attuale, data_attuale):
     if psa_precedente is None or psa_precedente <= 0 or psa_attuale <= psa_precedente or not data_precedente_str:
         return None
@@ -140,7 +150,7 @@ def calcola_timing_controllo(percorso, dati):
             "rec_psa": "PSA Sierico Ultrasensibile di controllo semestrale + Visita Urologica.",
             "rec_imaging": "Imaging non indicato di routine in assenza di incremento del PSA.",
             "rec_azione": "Proseguire follow-up oncologico regolare.",
-            "alert": "🟢 PSA nei limiti di negatività (<0.20 ng/ml).",
+            "alert": "🟢 PSA nei limits di negatività (<0.20 ng/ml).",
         }
     elif percorso == "Radioterapia":
         psa = dati.get("psa", 0.0)
@@ -170,9 +180,8 @@ def calcola_timing_controllo(percorso, dati):
 def render_modulo():
     st.title("🧬 Carcinoma Prostatico - Decision Support System")
 
-    # Inizializzazione db in sessione
-    if "db_pazienti" not in st.session_state:
-        st.session_state["db_pazienti"] = carica_db_pazienti()
+    # Inizializzazione e recupero DB sempre aggiornato
+    db_attivo = ottieni_db_aggiornato()
 
     modalita = st.radio(
         "Seleziona Fase del Patient Journey:",
@@ -184,8 +193,6 @@ def render_modulo():
         horizontal=True,
     )
 
-    db_attivo = st.session_state["db_pazienti"]
-
     if modalita == "1. Prima Visita: Inquadramento Bioptico & Rischio":
         st.subheader("📋 Inquadramento Clinico & Anamnesi Globale (Prostata)")
 
@@ -193,7 +200,8 @@ def render_modulo():
         
         nome_p = paziente_info["nome"]
         cognome_p = paziente_info["cognome"]
-        codice_paziente = paziente_info["id_univoco"]
+        # Normalizzazione in MAIUSCOLO del codice univoco
+        codice_paziente = str(paziente_info["id_univoco"]).strip().upper()
         data_nascita_p = datetime.strptime(paziente_info["data_nascita"], "%Y-%m-%d").date()
         totale_g8 = paziente_info["g8_score"]
         
@@ -240,7 +248,6 @@ def render_modulo():
         st.markdown("---")
         scelta_trattamento = st.selectbox("Trattamento Proposto / Concordato:", ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia", "Terapia Medica / Ormonale"]) if not necessita_stadiazione else "In attesa di Stadiazione (DMT)"
 
-        # Pulsante di salvataggio indipendente e immediato
         if st.button("💾 Salvataggio & Genera Report PDF (Prima Visita)", type="primary"):
             if not nome_p or not cognome_p or not codice_paziente:
                 st.error("Inserire Nome, Cognome e Codice Univoco del paziente.")
@@ -261,6 +268,7 @@ def render_modulo():
                     "dettagli": dettagli_str
                 }
                 
+                # Salvataggio nel dizionario condiviso e in session_state
                 db_attivo[codice_paziente] = {
                     "organo": "PROSTATA",
                     "nome": nome_p,
@@ -276,13 +284,12 @@ def render_modulo():
                 }
                 
                 salva_db_pazienti(db_attivo)
+                st.session_state["db_pazienti"] = db_attivo
                 genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
                 
-                # Salviamo lo stato in sessione per permettere il download del PDF in sicurezza
                 st.session_state["ultimo_paziente_salvato_prostata"] = codice_paziente
-                st.success(f"Paziente salvato con successo nel database! Codice univoco generato: `{codice_paziente}`")
+                st.success(f"Paziente salvato con successo! Codice univoco: `{codice_paziente}`")
 
-        # Se il paziente è stato salvato o esiste in sessione, rendiamo disponibile il download del PDF in autonomia
         if "ultimo_paziente_salvato_prostata" in st.session_state and st.session_state["ultimo_paziente_salvato_prostata"] in db_attivo:
             cod_salvato = st.session_state["ultimo_paziente_salvato_prostata"]
             paz_corrente = db_attivo[cod_salvato]
@@ -313,6 +320,9 @@ def render_modulo():
 
     elif modalita == "2. Rivalutazione dopo Stadiazione & Scelta Trattamento":
         st.subheader("📑 Rivalutazione post-Stadiazione (DMT) & Selezione Trattamento Definitivo")
+        
+        # Sincronizza sempre il DB prima di cercare
+        db_attivo = ottieni_db_aggiornato()
         
         codice_search = st.text_input("Inserisci Codice Univoco Paziente:", key="search_dmt_prostata").strip().upper()
         
@@ -364,8 +374,9 @@ def render_modulo():
                     }
                     paziente["visite"].append(dati_v)
                     salva_db_pazienti(db_attivo)
+                    st.session_state["db_pazienti"] = db_attivo
                     st.session_state["ultimo_paziente_rivalutato_prostata"] = codice_search
-                    st.success("Rivalutazione e scelta terapeutica salvate con successo nel database!")
+                    st.success("Rivalutazione salvata con successo nel database!")
 
                 if "ultimo_paziente_rivalutato_prostata" in st.session_state and st.session_state["ultimo_paziente_rivalutato_prostata"] == codice_search:
                     paz_aggiornato = db_attivo[codice_search]
@@ -385,10 +396,13 @@ def render_modulo():
                         mime="application/pdf"
                     )
             else:
-                st.error("❌ Nessun paziente trovato con questo codice univoco. Verifica l'ID inserito.")
+                st.error(f"❌ Nessun paziente trovato con il codice univoco `{codice_search}`. Sfoglia l'elenco o verifica l'inserimento.")
 
     elif modalita == "3. Follow-up Dedicato (Post-Trattamento / Sorveglianza)":
         st.subheader("🔍 Gestione Follow-up Clinico Dedicato")
+        
+        # Sincronizza sempre il DB prima di cercare
+        db_attivo = ottieni_db_aggiornato()
         
         codice_search = st.text_input("Inserisci Codice Univoco Paziente:", key="search_fu_prostata").strip().upper()
 
@@ -461,8 +475,9 @@ def render_modulo():
                     }
                     paziente["visite"].append(dati_v)
                     salva_db_pazienti(db_attivo)
+                    st.session_state["db_pazienti"] = db_attivo
                     st.session_state["ultimo_paziente_fu_prostata"] = codice_search
-                    st.success("Controllo di follow-up registrato e salvato con successo nel database!")
+                    st.success("Controllo di follow-up registrato e salvato nel database!")
 
                 if "ultimo_paziente_fu_prostata" in st.session_state and st.session_state["ultimo_paziente_fu_prostata"] == codice_search:
                     paz_aggiornato = db_attivo[codice_search]
@@ -487,4 +502,4 @@ def render_modulo():
                         mime="application/pdf"
                     )
             else:
-                st.error("❌ Nessun paziente trovato con questo codice univoco.")
+                st.error(f"❌ Nessun paziente trovato con il codice univoco `{codice_search}`.")
