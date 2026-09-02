@@ -137,66 +137,6 @@ def calcola_gruppo_rischio_eau(isup_num, psa, ct_stage, gleason_terziario):
     else:
         return ("Basso Rischio", False, "Stadiazione sistemica NON indicata. Candidato per Sorveglianza Attiva.")
 
-def calcola_timing_controllo(percorso, dati):
-    if percorso == "Sorveglianza Attiva":
-        isup = dati.get("isup", 1)
-        psadt = dati.get("psadt")
-        if (psadt is not None and psadt < 36) or isup > 1:
-            return {
-                "rec_psa": "PSA Sierico tra 3 Mesi (Monitoraggio stretto per cinetica rapida / PSADT < 36m).",
-                "rec_rmn": "⚠️ Programmare mpRMN Prostatica urgente (entro 3 mesi).",
-                "rec_bx": "⚠️ Ripetere Biopsia Prostatica di Riconferma/Re-stadiazione.",
-                "rec_azione": "Valutazione uscita dalla Sorveglianza Attiva.",
-                "alert": "⚠️ ATTENZIONE: PSADT accelerato o ISUP > 1. Valutare l'uscita dalla Sorveglianza Attiva.",
-            }
-        else:
-            return {
-                "rec_psa": "PSA Sierico ogni 6 Mesi + Visita Clinica.",
-                "rec_rmn": "Programmare mpRMN Prostatica a 12 mesi dall'inizio della SA (o di controllo annuale).",
-                "rec_bx": "Programmare Biopsia Prostatica di Riconferma tra i 12 e i 24 mesi.",
-                "rec_azione": "Proseguire protocollo di monitoraggio.",
-                "alert": "🟢 Cinetica del PSA nei limiti. Proseguire Sorveglianza Attiva.",
-            }
-    elif percorso.startswith("Chirurgia"):
-        psa = dati.get("psa", 0.0)
-        if psa >= 0.20:
-            return {
-                "rec_psa": "PSA Sierico Ultrasensibile di riconferma a 30 giorni.",
-                "rec_imaging": "⚠️ PET/TC PSMA tempestiva per restaging.",
-                "rec_azione": "Valutazione Radioterapica per Radioterapia di Salvataggio Precoce ± ADT.",
-                "alert": "🚨 RECIDIVA BIOCHIMICA CONFERMATA (PSA ≥ 0.20 ng/ml).",
-            }
-        return {
-            "rec_psa": "PSA Sierico Ultrasensibile di controllo semestrale + Visita Urologica.",
-            "rec_imaging": "Imaging non indicato di routine in assenza di incremento del PSA.",
-            "rec_azione": "Proseguire follow-up oncologico regolare.",
-            "alert": "🟢 PSA nei limiti di negatività (<0.20 ng/ml).",
-        }
-    elif percorso == "Radioterapia":
-        psa = dati.get("psa", 0.0)
-        psa_nadir = dati.get("psa_nadir", 0.0)
-        if psa_nadir > 0 and (psa - psa_nadir) >= 2.0:
-            return {
-                "rec_psa": "PSA Sierico di riconferma a 30 giorni.",
-                "rec_imaging": "⚠️ Programmare PET/TC PSMA e TC Torace-Addome di Re-stadiazione.",
-                "rec_azione": "Discussione DMT per Terapia di Salvataggio o Sistemica.",
-                "alert": "🚨 RECIDIVA BIOCHIMICA CRITERI PHOENIX (Nadir + 2.0 ng/ml).",
-            }
-        return {
-            "rec_psa": "PSA Sierico semestrale + Visita Radioterapica / Oncologica.",
-            "rec_imaging": "Imaging non indicato di routine in assenza di incremento sospetto.",
-            "rec_azione": "Proseguire monitoraggio del Nadir.",
-            "alert": "🟢 Cinetica del PSA stabile / post-attinica regolare.",
-        }
-    elif "Terapia Medica" in percorso or "Ormonale" in percorso:
-        return {
-            "rec_psa": "PSA Sierico, Testosterone totale e Profilo Metabolico ogni 3 mesi.",
-            "rec_imaging": "Imaging di rivalutazione secondo risposta clinica / biochimica.",
-            "rec_azione": "Monitoraggio tollerabilità ed efficacia della terapia sistemica.",
-            "alert": "🔵 Paziente in trattamento medico / deprivazione androgenica.",
-        }
-    return {"rec_psa": "PSA + Visita tra 6 Mesi.", "alert": "Info standard."}
-
 def render_modulo():
     st.title("Carcinoma Prostatico - Decision Support System")
 
@@ -498,83 +438,527 @@ def render_modulo():
                         st.markdown("---")
 
                 st.markdown("---")
-                col_psa1, col_psa2, col_psa3 = st.columns(3)
-                with col_psa1:
-                    mese_psa_a = st.selectbox("Mese Prelievo PSA", ELENCO_MESI, index=datetime.today().month - 1)
-                with col_psa2:
-                    anno_psa_a = st.number_input("Anno Prelievo PSA", min_value=2000, max_value=2030, value=datetime.today().year)
-                with col_psa3:
-                    psa_attuale = st.number_input("Valore PSA Sierico (ng/ml):", min_value=0.0, value=float(paziente.get("ultimo_psa", 0.0)), step=0.01)
 
-                num_mese_a = ELENCO_MESI.index(mese_psa_a) + 1
-                data_psa_attuale = datetime(anno_psa_a, num_mese_a, 1).date()
-                psadt_calcolato = calcola_psadt(paziente.get("ultimo_psa"), paziente.get("data_ultimo_psa"), psa_attuale, data_psa_attuale)
+                # ==========================================
+                # PERCORSO 1: SORVEGLIANZA ATTIVA
+                # ==========================================
+                if "Sorveglianza" in percorso_attuale:
+                    st.markdown("### 🔄 Nuova Valutazione: Sorveglianza Attiva")
+                    with st.form("form_nuova_valutazione_sa"):
+                        col_psa1, col_psa2, col_psa3 = st.columns(3)
+                        with col_psa1:
+                            mese_psa_a = st.selectbox("Mese Prelievo PSA", ELENCO_MESI, index=datetime.today().month - 1)
+                        with col_psa2:
+                            anno_psa_a = st.number_input("Anno Prelievo PSA", min_value=2000, max_value=2030, value=datetime.today().year)
+                        with col_psa3:
+                            psa_attuale = st.number_input("Valore PSA Attuale (ng/ml):", min_value=0.0, value=float(paziente.get("ultimo_psa", 0.0)), step=0.01)
 
-                if percorso_attuale == "Sorveglianza Attiva":
-                    res_fu = calcola_timing_controllo("Sorveglianza Attiva", {"isup": paziente.get("isup", 1), "psadt": psadt_calcolato})
-                elif percorso_attuale.startswith("Chirurgia"):
-                    res_fu = calcola_timing_controllo("Chirurgia", {"psa": psa_attuale})
-                elif percorso_attuale == "Radioterapia":
-                    res_fu = calcola_timing_controllo("Radioterapia", {"psa": psa_attuale, "psa_nadir": 0.1})
+                        col_img1, col_img2 = st.columns(2)
+                        with col_img1:
+                            repertoprecise = st.selectbox(
+                                "Reperto RMN di Controllo (Punteggio PRECISE):",
+                                [
+                                    "Non Eseguita",
+                                    "PRECISE 1 - Regressione sostanziale",
+                                    "PRECISE 2 - Lieve regressione",
+                                    "PRECISE 3 - Stabile / Nessun cambiamento significativo",
+                                    "PRECISE 4 - Moderata evidenza di progressione",
+                                    "PRECISE 5 - Sostanziale evidenza di progressione"
+                                ]
+                            )
+                        with col_img2:
+                            dre_esito = st.selectbox(
+                                "Esplorazione Rettale (DRE):",
+                                ["Negativa", "Positiva (Sospetto locale / Modificazione)"]
+                            )
+
+                        note_cliniche_fu = st.text_area("Dettagli clinici della visita, sintomi o annotazioni:")
+
+                        scelta_fine_visita = st.selectbox(
+                            "Decisione presa a fine visita (Aggiornamento Percorso):",
+                            [
+                                "Prosegue Sorveglianza Attiva",
+                                "Chirurgia (Post-Prostatectomia)",
+                                "Radioterapia"
+                            ]
+                        )
+
+                        submitted_sa = st.form_submit_button("💾 Salva Nuova Valutazione & Genera Referto PDF", type="primary")
+
+                        if submitted_sa:
+                            num_mese_a = ELENCO_MESI.index(mese_psa_a) + 1
+                            data_psa_attuale = datetime(anno_psa_a, num_mese_a, 1).date()
+                            
+                            psadt_calcolato = calcola_psadt(paziente.get("ultimo_psa"), paziente.get("data_ultimo_psa"), psa_attuale, data_psa_attuale)
+
+                            paziente["ultimo_psa"] = psa_attuale
+                            paziente["data_ultimo_psa"] = str(data_psa_attuale)
+                            paziente["percorso_scelto"] = scelta_fine_visita
+                            
+                            dettagli_fu = (
+                                f"Controllo Follow-up (Sorveglianza Attiva)\n"
+                                f"• PSA: {psa_attuale:.2f} ng/ml ({mese_psa_a} {anno_psa_a})\n"
+                                f"• PSADT Calcolato: {psadt_calcolato if psadt_calcolato else 'Stabile / Non calcolabile'} mesi\n"
+                                f"• RMN Controllo (PRECISE): {repertoprecise}\n"
+                                f"• Esplorazione Rettale (DRE): {dre_esito}\n"
+                                f"• Decisione Finale: {scelta_fine_visita}"
+                            )
+                            if note_cliniche_fu:
+                                dettagli_fu += f"\n• Note Cliniche: {note_cliniche_fu}"
+
+                            dati_nuova_visita = {
+                                "data": str(datetime.today().date()),
+                                "tipo": f"Visita di Controllo ({scelta_fine_visita})",
+                                "dettagli": dettagli_fu
+                            }
+                            
+                            paziente["visite"].append(dati_nuova_visita)
+                            salva_db_pazienti(db_attivo)
+                            st.session_state["db_pazienti"] = db_attivo
+                            st.session_state["ultimo_paziente_fu_sa"] = codice_search
+                            st.success("✅ Nuova valutazione salvata correttamente nello storico!")
+
+                    if st.session_state.get("ultimo_paziente_fu_sa") == codice_search and paziente["visite"]:
+                        ultima_visita = paziente["visite"][-1]
+                        note_pdf = [
+                            f"Valutazione RMN: {repertoprecise}",
+                            f"Esito DRE: {dre_esito}",
+                            f"Decisione di fine visita: {scelta_fine_visita}",
+                            note_cliniche_fu if 'note_cliniche_fu' in locals() else ""
+                        ]
+                        note_pdf = [n for n in note_pdf if n]
+                        
+                        pdf_bytes = genera_pdf_referto(
+                            codice_search, 
+                            ultima_visita, 
+                            paziente.get("percorso_scelto", percorso_attuale), 
+                            note_pdf, 
+                            nome=paziente.get('nome', ''), 
+                            cognome=paziente.get('cognome', '')
+                        )
+                        
+                        st.download_button(
+                            label="📄 Scarica Referto Aggiornato in PDF",
+                            data=pdf_bytes,
+                            file_name=f"Referto_Sorveglianza_Attiva_{codice_search}.pdf",
+                            mime="application/pdf",
+                            key="download_pdf_sa_aggiornato"
+                        )
+
+                # ==========================================
+                # PERCORSO 2: CHIRURGIA
+                # ==========================================
+                elif "Chirurgia" in percorso_attuale:
+                    st.markdown("### 🔄 Nuova Valutazione: Post-Prostatectomia Radicale")
+                    
+                    with st.expander("📋 Istologia Definitiva & Caratteristiche Chirurgiche (Baseline)", expanded=False):
+                        col_st1, col_st2, col_st3 = st.columns(3)
+                        with col_st1:
+                            pt_stage = st.selectbox("Stadio Patologico (pT):", ["pT2", "pT3a", "pT3b", "pT4"], key="chir_pt")
+                        with col_st2:
+                            pn_stage = st.selectbox("Stato Linfonodale (pN):", ["pN0", "pN1", "pNX"], key="chir_pn")
+                        with col_st3:
+                            margini_r = st.selectbox("Margini Chirurgici (R):", ["R0 (Negativi)", "R1 (Microscopici positivi)", "R2 (Macroscopici positivi)"], key="chir_r")
+
+                        col_g1, col_g2 = st.columns(2)
+                        with col_g1:
+                            isup_post = st.selectbox("Gruppo ISUP Post-Op:", [1, 2, 3, 4, 5], key="chir_isup")
+                        with col_g2:
+                            nerve_sparing = st.selectbox("Nerve Sparing:", ["No", "Monolaterale", "Bilaterale"], key="chir_ns")
+
+                    if pt_stage in ["pT3a", "pT3b", "pT4"] or "R1" in margini_r or "R2" in margini_r:
+                        st.error("⚠️ **ATTENZIONE (Fattori di Rischio Anatomo-Patologici):** Rilevato stadio pT3/pT4 e/o Margini Chirurgici Positivi (R1/R2). **Considerare Radioterapia di Salvataggio.**")
+
+                    with st.form("form_nuova_valutazione_chirurgia"):
+                        col_psa1, col_psa2, col_psa3 = st.columns(3)
+                        with col_psa1:
+                            mese_psa_a = st.selectbox("Mese Prelievo PSA", ELENCO_MESI, index=datetime.today().month - 1)
+                        with col_psa2:
+                            anno_psa_a = st.number_input("Anno Prelievo PSA", min_value=2000, max_value=2030, value=datetime.today().year)
+                        with col_psa3:
+                            psa_attuale = st.number_input("Valore PSA Post-Op (ng/ml):", min_value=0.0, value=float(paziente.get("ultimo_psa", 0.0)), step=0.001, format="%.3f")
+
+                        note_cliniche_fu = st.text_area("Dettagli clinici della visita, continenza, potenza o annotazioni:")
+
+                        scelta_fine_visita = st.selectbox(
+                            "Decisione presa a fine visita (Aggiornamento Percorso):",
+                            [
+                                "Prosegue Follow-up Biochimico",
+                                "Radioterapia di Salvataggio",
+                                "Terapia Ormonale / Altro"
+                            ]
+                        )
+
+                        submitted_chir = st.form_submit_button("💾 Salva Nuova Valutazione & Genera Referto PDF", type="primary")
+
+                        if submitted_chir:
+                            num_mese_a = ELENCO_MESI.index(mese_psa_a) + 1
+                            data_psa_attuale = datetime(anno_psa_a, num_mese_a, 1).date()
+
+                            paziente["ultimo_psa"] = psa_attuale
+                            paziente["data_ultimo_psa"] = str(data_psa_attuale)
+                            paziente["percorso_scelto"] = scelta_fine_visita
+
+                            stato_psa_txt = "Negativo / Indetectable (< 0.2 ng/ml)" if psa_attuale < 0.2 else "⚠️ POSITIVO / Rialzo (≥ 0.2 ng/ml - Sospetta Recidiva Biochimica)"
+
+                            dettagli_fu = (
+                                f"Controllo Post-Prostatectomia Radicale\n"
+                                f"• Istologia: {pt_stage}, {pn_stage}, {margini_r}, ISUP {isup_post}, Nerve-Sparing: {nerve_sparing}\n"
+                                f"• PSA: {psa_attuale:.3f} ng/ml ({mese_psa_a} {anno_psa_a}) -> {stato_psa_txt}\n"
+                                f"• Decisione Finale: {scelta_fine_visita}"
+                            )
+                            if note_cliniche_fu:
+                                dettagli_fu += f"\n• Note Cliniche: {note_cliniche_fu}"
+
+                            dati_nuova_visita = {
+                                "data": str(datetime.today().date()),
+                                "tipo": f"Controllo Chirurgico ({scelta_fine_visita})",
+                                "dettagli": dettagli_fu
+                            }
+
+                            paziente["visite"].append(dati_nuova_visita)
+                            salva_db_pazienti(db_attivo)
+                            st.session_state["db_pazienti"] = db_attivo
+                            st.session_state["ultimo_paziente_fu_chirurgia"] = codice_search
+                            st.success("✅ Nuova valutazione chirurgica salvata correttamente nello storico!")
+
+                    if 'psa_attuale' in locals() and psa_attuale >= 0.2:
+                        st.error("⚠️ **ATTENZIONE (Recidiva Biochimica):** Valore di PSA post-prostatectomia $\\ge 0.2\\text{ ng/ml}$. **Considerare Radioterapia di Salvataggio.**")
+
+                    if st.session_state.get("ultimo_paziente_fu_chirurgia") == codice_search and paziente["visite"]:
+                        ultima_visita = paziente["visite"][-1]
+                        
+                        note_pdf = [
+                            f"Stadio Patologico: {pt_stage if 'pt_stage' in locals() else 'pT2'} | {pn_stage if 'pn_stage' in locals() else 'pN0'} | {margini_r if 'margini_r' in locals() else 'R0'} | ISUP {isup_post if 'isup_post' in locals() else '1'}",
+                            f"Nerve Sparing: {nerve_sparing if 'nerve_sparing' in locals() else 'No'}",
+                            f"Decisione di fine visita: {scelta_fine_visita if 'scelta_fine_visita' in locals() else ''}",
+                            note_cliniche_fu if 'note_cliniche_fu' in locals() else ""
+                        ]
+                        if 'psa_attuale' in locals() and psa_attuale >= 0.2:
+                            note_pdf.append("ATTENZIONE: PSA >= 0.2 ng/ml. Valutare radioterapia di salvataggio.")
+                            
+                        note_pdf = [n for n in note_pdf if n]
+                        
+                        pdf_bytes = genera_pdf_referto(
+                            codice_search, 
+                            ultima_visita, 
+                            paziente.get("percorso_scelto", percorso_attuale), 
+                            note_pdf, 
+                            nome=paziente.get('nome', ''), 
+                            cognome=paziente.get('cognome', '')
+                        )
+                        
+                        st.download_button(
+                            label="📄 Scarica Referto Post-Chirurgico in PDF",
+                            data=pdf_bytes,
+                            file_name=f"Referto_Chirurgia_{codice_search}.pdf",
+                            mime="application/pdf",
+                            key="download_pdf_chirurgia_aggiornato"
+                        )
+
+                # ==========================================
+                # PERCORSO 3: RADIOTERAPIA
+                # ==========================================
+                elif "Radioterapia" in percorso_attuale:
+                    st.subheader("⚡ Follow-up Dedicato: Post-Radioterapia (RT)")
+                    
+                    with st.expander("📋 Dettagli Trattamento Radioterapico & Terapia Sistemica (Baseline)", expanded=False):
+                        col_rt1, col_rt2, col_rt3 = st.columns(3)
+                        with col_rt1:
+                            schema_rt = st.selectbox(
+                                "Schema Radioterapico:",
+                                [
+                                    "Convenzionale / Frazionamento Standard",
+                                    "Ipofrazionato Moderato",
+                                    "Stereotassico / SBRT Ultra-ipofrazionato (5 sedute)",
+                                    "Altro / Brachiterapia"
+                                ],
+                                key="rt_schema"
+                            )
+                        with col_rt2:
+                            dose_gy = st.number_input("Dose Totale (Gy):", min_value=0.0, max_value=100.0, value=78.0, step=0.5, key="rt_gy")
+                        with col_rt3:
+                            trattamento_linfonodi = st.selectbox("Irradiazione Linfonodale:", ["No", "Sì (Pelvici / Selettivi)"], key="rt_ln")
+
+                        col_ter1, col_ter2 = st.columns(2)
+                        with col_ter1:
+                            terapia_lhrh = st.selectbox(
+                                "Terapia con LHRH (Agonista/Antagonista):",
+                                ["Non associata", "Leuprorelina", "Triptorelina", "Relugolix"],
+                                key="rt_lhrh"
+                            )
+                        with col_ter2:
+                            terapia_arsi = st.selectbox(
+                                "Inibitore del Recettore degli Androgeni (ARSI):",
+                                ["Non associato", "Apalutamide", "Darolutamide", "Enzalutamide", "Abiraterone"],
+                                key="rt_arsi"
+                            )
+
+                    if "nadir_psa" not in paziente:
+                        paziente["nadir_psa"] = None
+
+                    with st.form("form_nuova_valutazione_rt"):
+                        col_psa1, col_psa2, col_psa3 = st.columns(3)
+                        with col_psa1:
+                            mese_psa_a = st.selectbox("Mese Prelievo PSA", ELENCO_MESI, index=datetime.today().month - 1)
+                        with col_psa2:
+                            anno_psa_a = st.number_input("Anno Prelievo PSA", min_value=2000, max_value=2030, value=datetime.today().year)
+                        with col_psa3:
+                            psa_attuale = st.number_input("Valore PSA Attuale (ng/ml):", min_value=0.0, value=float(paziente.get("ultimo_psa", 0.0)), step=0.001, format="%.3f")
+
+                        note_cliniche_fu = st.text_area("Dettagli clinici della visita, tossicità genito-urinaria/intestinale o annotazioni:")
+
+                        scelta_fine_visita = st.selectbox(
+                            "Decisione presa a fine visita (Aggiornamento Percorso):",
+                            [
+                                "Prosegue Follow-up Biochimico RT",
+                                "Approfondimento di Stadiazione (PET-Cholina / PSMA)",
+                                "Terapia Medica di Salvataggio / OME"
+                            ]
+                        )
+
+                        submitted_rt = st.form_submit_button("💾 Salva Nuova Valutazione & Genera Referto PDF", type="primary")
+
+                        if submitted_rt:
+                            num_mese_a = ELENCO_MESI.index(mese_psa_a) + 1
+                            data_psa_attuale = datetime(anno_psa_a, num_mese_a, 1).date()
+
+                            nadir_attuale = paziente.get("nadir_psa")
+                            if nadir_attuale is None or psa_attuale < nadir_attuale:
+                                paziente["nadir_psa"] = psa_attuale
+                                nadir_utilizzato = psa_attuale
+                            else:
+                                nadir_utilizzato = nadir_attuale
+
+                            paziente["ultimo_psa"] = psa_attuale
+                            paziente["data_ultimo_psa"] = str(data_psa_attuale)
+                            paziente["percorso_scelto"] = scelta_fine_visita
+
+                            soglia_phoenix = (paziente["nadir_psa"] or 0.0) + 2.0
+                            is_recidiva = psa_attuale >= soglia_phoenix
+                            msg_phoenix = f"⚠️ RECIDIVA BIOCHIMICA (Criteri Phoenix): PSA ({psa_attuale} ng/ml) >= Nadir ({paziente['nadir_psa']} + 2.0)." if is_recidiva else f"🟢 PSA sotto soglia Phoenix (Nadir: {paziente['nadir_psa']} ng/ml)."
+
+                            dettagli_fu = (
+                                f"Controllo Post-Radioterapia\n"
+                                f"• Schema: {schema_rt} ({dose_gy} Gy), Linfonodi: {trattamento_linfonodi}\n"
+                                f"• Terapia Sistemica: LHRH ({terapia_lhrh}) | ARSI ({terapia_arsi})\n"
+                                f"• PSA: {psa_attuale:.3f} ng/ml ({mese_psa_a} {anno_psa_a}) | Nadir: {nadir_utilizzato:.3f} ng/ml\n"
+                                f"• Esito Phoenix: {msg_phoenix}\n"
+                                f"• Decisione Finale: {scelta_fine_visita}"
+                            )
+                            if note_cliniche_fu:
+                                dettagli_fu += f"\n• Note Cliniche: {note_cliniche_fu}"
+
+                            dati_nuova_visita = {
+                                "data": str(datetime.today().date()),
+                                "tipo": f"Controllo RT ({scelta_fine_visita})",
+                                "dettagli": dettagli_fu
+                            }
+
+                            paziente["visite"].append(dati_nuova_visita)
+                            salva_db_pazienti(db_attivo)
+                            st.session_state["db_pazienti"] = db_attivo
+                            st.session_state["ultimo_paziente_fu_rt"] = codice_search
+                            st.success("✅ Nuova valutazione radioterapica salvata correttamente nello storico!")
+
+                    if "nadir_psa" in paziente and paziente["nadir_psa"] is not None:
+                        soglia_chk = paziente["nadir_psa"] + 2.0
+                        if float(paziente.get("ultimo_psa", 0.0)) >= soglia_chk:
+                            st.error(f"⚠️ Criteri Phoenix superati: PSA attuale >= Nadir ({paziente['nadir_psa']}) + 2.0 ng/ml.")
+                        else:
+                            st.success(f"🟢 PSA regolare rispetto al Nadir registrato ({paziente['nadir_psa']} ng/ml).")
+
+                    if st.session_state.get("ultimo_paziente_fu_rt") == codice_search and paziente["visite"]:
+                        ultima_visita = paziente["visite"][-1]
+                        
+                        note_pdf = [
+                            f"Schema RT: {schema_rt if 'schema_rt' in locals() else ''} ({dose_gy if 'dose_gy' in locals() else ''} Gy)",
+                            f"Nadir PSA: {paziente.get('nadir_psa')} ng/ml",
+                            f"Decisione di fine visita: {scelta_fine_visita if 'scelta_fine_visita' in locals() else ''}",
+                            note_cliniche_fu if 'note_cliniche_fu' in locals() else ""
+                        ]
+                        note_pdf = [n for n in note_pdf if n]
+                        
+                        pdf_bytes = genera_pdf_referto(
+                            codice_search, 
+                            ultima_visita, 
+                            paziente.get("percorso_scelto", percorso_attuale), 
+                            note_pdf, 
+                            nome=paziente.get('nome', ''), 
+                            cognome=paziente.get('cognome', '')
+                        )
+                        
+                        st.download_button(
+                            label="📄 Scarica Referto Post-Radioterapia in PDF",
+                            data=pdf_bytes,
+                            file_name=f"Referto_Radioterapia_{codice_search}.pdf",
+                            mime="application/pdf",
+                            key="download_pdf_rt_aggiornato"
+                        )
+
+                # ==========================================
+                # PERCORSO 4: TERAPIA MEDICA
+                # ==========================================
                 else:
-                    res_fu = calcola_timing_controllo("Terapia Medica / Ormonale", {"psa": psa_attuale})
+                    st.markdown("### 🟡 Protocollo di Terapia Medica Avanzata")
+                    st.info("Gestione della malattia metastatica o avanzata, transizione mCRPC, terapie sistemiche, mutazioni HRR/BRCA, salute ossea e monitoraggio di PSA e testosteronemia.")
 
-                st.markdown("Indicazioni di Monitoraggio Personalizzate")
-                st.info(f"Controllo Biochimico: {res_fu['rec_psa']}")
-                if res_fu.get('rec_rmn'):
-                    st.write(f"- {res_fu['rec_rmn']}")
-                if res_fu.get('rec_bx'):
-                    st.write(f"- {res_fu['rec_bx']}")
-                if res_fu.get('rec_imaging'):
-                    st.warning(res_fu['rec_imaging'])
-                
-                if res_fu.get('alert'):
-                    st.warning(res_fu['alert'])
+                    with st.form(key="form_terapia_medica_aggiornato"):
+                        st.markdown("#### 🌍 Caratteristiche di Malattia e Volume (Criteri CHAARTED / STAMPEDE)")
+                        
+                        col_vol1, col_vol2 = st.columns(2)
+                        with col_vol1:
+                            presenza_metastasi = st.selectbox("Presenza di Metastasi", ["No (M0 / Ormonodipendente non metastatica)", "Sì (M1 / Malattia metastatica)"], key="tm_metastasi_check")
+                        with col_vol2:
+                            volume_malattia = st.selectbox("Volume di Malattia (Criteri CHAARTED/STAMPEDE)", ["Non applicabile (M0)", "Low Volume (Basso volume)", "High Volume (Alto volume: metastasi viscerali o >=4 lesioni ossee con almeno una extra-assiale/vertebrale)"], key="tm_volume")
 
-                note_cliniche_fu = st.text_area("Note cliniche aggiuntive per la visita di controllo:")
+                        st.markdown("---")
+                        st.markdown("#### 🚨 Stato di Malattia e transizione mCRPC (Resistenza alla Castrazione - Linee Guida EAU/ESMO)")
+                        
+                        col_crpc1, col_crpc2 = st.columns(2)
+                        with col_crpc1:
+                            stato_crpc = st.selectbox(
+                                "Stato di Resistenza alla Castrazione", 
+                                ["No (Sensibile agli androgeni / mHSPC)", "Sì (mCRPC - Resistente alla castrazione con testosterone in target)"], 
+                                key="tm_crpc_check"
+                            )
+                        with col_crpc2:
+                            opzione_mcrpc = "Non applicabile"
+                            if "Sì (mCRPC" in stato_crpc:
+                                opzione_mcrpc = st.selectbox(
+                                    "Strategia di Linea Successiva (mCRPC)",
+                                    ["Switch di ARSI", "Chemioterapia con Cabazitaxel", "Terapia Radiometabolica (177Lu-PSMA)", "Radio-223 (per metastasi ossee esclusive)"],
+                                    key="tm_strat_mcrpc"
+                                )
+                            else:
+                                st.info("Paziente in fase ormonosensibile.")
 
-                if st.button("Salva Visita di Follow-up & Genera PDF", type="primary"):
-                    paziente["ultimo_psa"] = psa_attuale
-                    paziente["data_ultimo_psa"] = str(data_psa_attuale)
-                    
-                    dettagli_fu = f"Percorso: {percorso_attuale}\nPSA: {psa_attuale:.2f} ng/ml ({mese_psa_a} {anno_psa_a})"
-                    if psadt_calcolato:
-                        dettagli_fu += f" | PSADT: {psadt_calcolato} mesi"
-                    if note_cliniche_fu:
-                        dettagli_fu += f"\nNote: {note_cliniche_fu}"
+                        st.markdown("---")
+                        st.markdown("#### 💉 Terapia Ormonale e ARSI")
+                        
+                        col_LHRH1, col_LHRH2, col_LHRH3 = st.columns(3)
+                        with col_LHRH1:
+                            fatto_lhrh_tm = st.selectbox("Terapia LH-RH in corso?", ["No", "Sì"], key="tm_lhrh_check")
+                        with col_LHRH2:
+                            tipo_lhrh_tm = st.selectbox("Molecola LH-RH", ["Nessuna", "Triptorelina", "Leuprorelina", "Relugolix"], key="tm_tipo_lhrh")
+                        with col_LHRH3:
+                            data_inizio_lhrh_tm = st.date_input("Data di inizio LH-RH", value=datetime.today(), key="tm_lhrh_data")
 
-                    dati_v = {
-                        "data": str(datetime.today().date()),
-                        "tipo": f"Follow-up Dedicato ({percorso_attuale})",
-                        "dettagli": dettagli_fu
-                    }
-                    paziente["visite"].append(dati_v)
-                    salva_db_pazienti(db_attivo)
-                    st.session_state["db_pazienti"] = db_attivo
-                    st.session_state["ultimo_paziente_fu_prostata"] = codice_search
-                    st.success("Controllo di follow-up registrato e salvato con successo nel database!")
+                        col_arsi1, col_arsi2 = st.columns(2)
+                        with col_arsi1:
+                            usa_arsi_tm = st.selectbox("Associazione con ARSI?", ["No", "Sì"], key="tm_arsi_check")
+                        with col_arsi2:
+                            tipo_arsi_tm = st.selectbox("Molecola ARSI", ["Nessuna", "Apalutamide", "Darolutamide", "Enzalutamide", "Abiraterone"], key="tm_tipo_arsi")
 
-                if "ultimo_paziente_fu_prostata" in st.session_state and st.session_state["ultimo_paziente_fu_prostata"] == codice_search:
-                    paz_aggiornato = db_attivo[codice_search]
-                    ultima_visita = paz_aggiornato["visite"][-1]
-                    
-                    note_pdf = [
-                        res_fu.get("alert"), 
-                        res_fu.get("rec_psa"), 
-                        res_fu.get("rec_rmn"), 
-                        res_fu.get("rec_bx"), 
-                        res_fu.get("rec_imaging"),
-                        res_fu.get("rec_azione"),
-                        note_cliniche_fu
-                    ]
-                    note_pdf = [n for n in note_pdf if n]
-                    
-                    pdf_bytes = genera_pdf_referto(codice_search, ultima_visita, percorso_attuale, note_pdf, nome=paz_aggiornato.get('nome',''), cognome=paz_aggiornato.get('cognome',''))
-                    st.download_button(
-                        label="Scarica Referto Follow-up PDF",
-                        data=pdf_bytes,
-                        file_name=f"FollowUp_{percorso_attuale.replace(' ', '_')}_{codice_search}.pdf",
-                        mime="application/pdf"
-                    )
+                        st.markdown("---")
+                        st.markdown("#### 💊 Chemioterapia, Target Therapy (PARPi) e Salute Ossea")
+                        
+                        col_chem1, col_chem2 = st.columns(2)
+                        with col_chem1:
+                            usa_chemio = st.selectbox("Chemioterapia associata?", ["No", "Sì"], key="tm_chemio_check")
+                        with col_chem2:
+                            tipo_chemio = st.selectbox("Molecola Chemioterapica", ["Nessuna", "Docetaxel", "Cabazitaxel"], key="tm_tipo_chemio")
+
+                        st.markdown("##### 🧬 Profilo Mutazionale HRR / BRCA e PARP Inibitori")
+                        col_parp1, col_parp2 = st.columns(2)
+                        with col_parp1:
+                            brca_mutato = st.checkbox("Paziente con mutazione BRCA1/2 o HRR (Homologous Recombination Repair esteso)", key="tm_brca_check")
+                        with col_parp2:
+                            tipo_parpi = st.selectbox("Scelta PARP Inibitore (PARPi)", ["Nessuno", "Olaparib", "Niraparib", "Talazoparib"], key="tm_tipo_parpi")
+
+                        st.markdown("##### 🦴 Protezione Ossea (Bone Health - Prevenzione SRE)")
+                        col_bone1, col_bone2 = st.columns(2)
+                        with col_bone1:
+                            terapia_osso = st.selectbox("Terapia Osteoprotettiva Associata", ["Nessuna", "Acido Zoledronico", "Denosumab"], key="tm_bone_med")
+                        with col_bone2:
+                            supp_vitd = st.checkbox("Inclusa supplementazione Calcemia / Vitamina D", key="tm_vitd_check")
+
+                        st.markdown("---")
+                        st.markdown("#### 📈 Monitoraggio Biochimico (PSA e Testosteronemia)")
+                        
+                        col_bio1, col_bio2, col_bio3 = st.columns(3)
+                        with col_bio1:
+                            valore_psa_tm = st.number_input("Valore PSA Attuale (ng/mL)", min_value=0.0, max_value=1000.0, value=float(paziente.get("ultimo_psa", 0.0)), step=0.1, key="tm_psa_val")
+                        with col_bio2:
+                            valore_testosterone = st.number_input("Testosteronemia (ng/dL)", min_value=0.0, max_value=1500.0, value=0.0, step=1.0, key="tm_testosterone")
+                        with col_bio3:
+                            target_castrazione = st.selectbox("Target Testosterone di Castrazione (< 50 ng/dL)?", ["Raggiunto (< 50 ng/dL)", "Non raggiunto (>= 50 ng/dL - Fuga biochimica)"], key="tm_target_test")
+
+                        if "Non raggiunto" in target_castrazione:
+                            st.error("⚠️ **ATTENZIONE**: Il livello di testosterone non rientra nel range di castrazione (< 50 ng/dL).")
+                        else:
+                            st.success("✅ Livello di testosteronemia in target di castrazione.")
+
+                        st.markdown("---")
+                        scelta_fine_visita_tm = st.selectbox(
+                            "Decisione presa a fine visita (Aggiornamento Percorso):",
+                            [
+                                "Prosegue Terapia Medica in corso",
+                                "Switch terapeutico / Modifica Linea Sistemica",
+                                "Avvio percorso di cure palliative / supportive"
+                            ],
+                            key="tm_scelta_fine"
+                        )
+
+                        note_tm = st.text_area("Note cliniche, tollerabilità e raccomandazioni di terapia medica:", key="tm_note")
+                        
+                        submit_tm = st.form_submit_button("💾 Salva Nuova Valutazione & Genera Referto PDF", type="primary")
+                        
+                        if submit_tm:
+                            paziente["ultimo_psa"] = valore_psa_tm
+                            paziente["percorso_scelto"] = scelta_fine_visita_tm
+
+                            dettagli_tm = (
+                                f"Controllo Terapia Medica Avanzata\n"
+                                f"• Stato: {presenza_metastasi} | Volume: {volume_malattia} | mCRPC: {stato_crpc} (Strategia: {opzione_mcrpc})\n"
+                                f"• LH-RH: {fatto_lhrh_tm} ({tipo_lhrh_tm}) | ARSI: {usa_arsi_tm} ({tipo_arsi_tm})\n"
+                                f"• Chemio: {usa_chemio} ({tipo_chemio}) | HRR/BRCA: {brca_mutato} (PARPi: {tipo_parpi})\n"
+                                f"• Bone Health: {terapia_osso} (Vit.D/Ca: {supp_vitd})\n"
+                                f"• Biochimica: PSA {valore_psa_tm} ng/mL | Testosterone {valore_testosterone} ng/dL ({target_castrazione})\n"
+                                f"• Decisione Fine Visita: {scelta_fine_visita_tm}\n"
+                                f"• Note: {note_tm}"
+                            )
+                            
+                            dati_v_tm = {
+                                "data": str(datetime.today().date()),
+                                "tipo": f"Follow-up Terapia Medica ({scelta_fine_visita_tm})",
+                                "dettagli": dettagli_tm
+                            }
+                            
+                            if "visite" not in paziente:
+                                paziente["visite"] = []
+                            paziente["visite"].append(dati_v_tm)
+                            salva_db_pazienti(db_attivo)
+                            st.session_state["db_pazienti"] = db_attivo
+                            st.session_state["ultimo_paziente_fu_tm"] = codice_search
+                            st.success("✅ Nuova valutazione di terapia medica salvata correttamente nello storico!")
+
+                    if st.session_state.get("ultimo_paziente_fu_tm") == codice_search and paziente.get("visite"):
+                        ultima_visita = paziente["visite"][-1]
+                        
+                        note_pdf = [
+                            f"Stato mCRPC: {stato_crpc if 'stato_crpc' in locals() else ''}",
+                            f"Terapia Sistemica: LHRH ({tipo_lhrh_tm if 'tipo_lhrh_tm' in locals() else ''}), ARSI ({tipo_arsi_tm if 'tipo_arsi_tm' in locals() else ''})",
+                            f"Bone Health: {terapia_osso if 'terapia_osso' in locals() else ''}",
+                            note_tm if 'note_tm' in locals() else ""
+                        ]
+                        note_pdf = [n for n in note_pdf if n]
+
+                        pdf_bytes = genera_pdf_referto(
+                            codice_search, 
+                            ultima_visita, 
+                            paziente.get("percorso_scelto", percorso_attuale), 
+                            note_pdf, 
+                            nome=paziente.get('nome', ''), 
+                            cognome=paziente.get('cognome', '')
+                        )
+                        
+                        st.download_button(
+                            label="📄 Scarica Referto Terapia Medica in PDF",
+                            data=pdf_bytes,
+                            file_name=f"Referto_TerapiaMedica_{codice_search}.pdf",
+                            mime="application/pdf",
+                            key="download_pdf_tm_aggiornato"
+                        )
             else:
                 st.error(f"Nessun paziente trovato con il codice univoco {codice_search}.")
