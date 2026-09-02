@@ -24,7 +24,7 @@ def genera_codice_univoco_organo(nome, cognome, organo_lettera="P"):
 
 def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
     """
-    Modulo unificato con inclusione del Charlson Comorbidity Index dopo la valutazione geriatrica.
+    Modulo unificato con inclusione del Charlson Comorbidity Index corretto.
     """
     st.markdown("### 📋 Anagrafica & Identificazione")
     
@@ -121,15 +121,15 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
     st.markdown("### 📊 Charlson Comorbidity Index (CCI)")
     with st.expander("Seleziona comorbilità attive per calcolo Charlson", expanded=False):
         c_infarto = st.checkbox("Infarto miocardico pregresso (+1)", key=f"{prefix}_c_infarto")
-        c_ scompenso = st.checkbox("Scompenso cardiaco congestizio (+1)", key=f"{prefix}_c_scompenso")
+        c_scompenso = st.checkbox("Scompenso cardiaco congestizio (+1)", key=f"{prefix}_c_scompenso")
         c_vascolare = st.checkbox("Malattia vascolare periferica (+1)", key=f"{prefix}_c_vascolare")
-        c_ cerebrovascolare = st.checkbox("Malattia cerebrovascolare / TIA (+1)", key=f"{prefix}_c_cerebrovascolare")
+        c_cerebrovascolare = st.checkbox("Malattia cerebrovascolare / TIA (+1)", key=f"{prefix}_c_cerebrovascolare")
         c_demenza = st.checkbox("Demenza (+1)", key=f"{prefix}_c_demenza")
         c_bpco = st.checkbox("Malattia polmonare cronica (BPCO) (+1)", key=f"{prefix}_c_bpco")
         c_connettivite = st.checkbox("Malattia del tessuto connettivo / Reumatologica (+1)", key=f"{prefix}_c_connettivite")
-        c_ ulcera = st.checkbox("Ulcera peptica (+1)", key=f"{prefix}_c_ulcera")
+        c_ulcera = st.checkbox("Ulcera peptica (+1)", key=f"{prefix}_c_ulcera")
         c_fegato_l = st.checkbox("Malattia epatica lieve (+1)", key=f"{prefix}_c_fegato_l")
-        c_diabete = st.checkbox("Diabete mellito (senza danno d'organo +1 / con danno d'organo +2)", key=f"{prefix}_c_diabete")
+        c_diabete = st.checkbox("Diabete mellito (+1)", key=f"{prefix}_c_diabete")
         c_emiplegia = st.checkbox("Emiplegia o paraplegia (+2)", key=f"{prefix}_c_emiplegia")
         c_renale = st.checkbox("Malattia renale cronica moderata-severa (+2)", key=f"{prefix}_c_renale")
         c_tumore = st.checkbox("Tumore solido localizzato (+2)", key=f"{prefix}_c_tumore")
@@ -138,7 +138,6 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
         c_metastasi = st.checkbox("Tumore solido metastatico / Malattia disseminata (+6)", key=f"{prefix}_c_metastasi")
         c_aids = st.checkbox("AIDS / HIV conclamato (+6)", key=f"{prefix}_c_aids")
 
-    # Calcolo base Charlson (pesi clinici standard)
     base_charlson = 0
     if c_infarto: base_charlson += 1
     if c_scompenso: base_charlson += 1
@@ -149,7 +148,7 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
     if c_connettivite: base_charlson += 1
     if c_ulcera: base_charlson += 1
     if c_fegato_l: base_charlson += 1
-    if c_diabete: base_charlson += 1 # standard base 1, aggiustabile se serve
+    if c_diabete: base_charlson += 1
     if c_emiplegia: base_charlson += 2
     if c_renale: base_charlson += 2
     if c_tumore: base_charlson += 2
@@ -158,11 +157,10 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
     if c_metastasi: base_charlson += 6
     if c_aids: base_charlson += 6
 
-    # Aggiustamento età per Charlson (1 punto ogni decennio sopra i 50 anni)
     bonus_eta_charlson = 0
-    if eta >= 50 and eta < 60: bonus_eta_charlson = 1
-    elif eta >= 60 and eta < 70: bonus_eta_charlson = 2
-    elif eta >= 70 and eta < 80: bonus_eta_charlson = 3
+    if 50 <= eta < 60: bonus_eta_charlson = 1
+    elif 60 <= eta < 70: bonus_eta_charlson = 2
+    elif 70 <= eta < 80: bonus_eta_charlson = 3
     elif eta >= 80: bonus_eta_charlson = 4
 
     charlson_totale = base_charlson + bonus_eta_charlson
