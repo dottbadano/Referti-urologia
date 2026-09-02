@@ -273,3 +273,64 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
         "interventi": interventi.strip(),
         "farmacologica": farmacologica.strip()
     }
+
+def formatta_anamnesi_per_pdf_unificata(paziente_info):
+    """
+    Formatta l'anamnesi in modo pulito ed esclusivo dei campi compilati/positivi per il PDF.
+    """
+    righe = []
+    
+    # Dati antropometrici e performance
+    righe.append(f"• Età: {paziente_info.get('eta', 'N/D')} anni | Peso: {paziente_info.get('peso', 'N/D')} kg | Altezza: {paziente_info.get('altezza', 'N/D')} cm | BMI: {paziente_info.get('bmi', 'N/D')}")
+    righe.append(f"• Performance Status (ECOG): {paziente_info.get('ecog', 'N/D')}")
+    
+    if paziente_info.get('adl') and paziente_info.get('adl') != "Non valutato":
+        righe.append(f"• ADL: {paziente_info.get('adl')}")
+    if paziente_info.get('iadl') and paziente_info.get('iadl') != "Non valutato":
+        righe.append(f"• IADL: {paziente_info.get('iadl')}")
+        
+    # Valutazione geriatrica
+    righe.append(f"• Screening G8: {paziente_info.get('g8_score', 'N/D')}/17")
+    if paziente_info.get('gds') and paziente_info.get('gds') != "Non valutato":
+        righe.append(f"• GDS: {paziente_info.get('gds')}")
+    if paziente_info.get('mmse_eseguito') and paziente_info.get('mmse_valore'):
+        righe.append(f"• MMSE: {paziente_info.get('mmse_valore')}")
+        
+    # Comorbilità e indici
+    righe.append(f"• Charlson Comorbidity Index (corretto): {paziente_info.get('charlson_score', 'N/D')}")
+    
+    # Allergie e stili di vita
+    if paziente_info.get('ha_allergie') and paziente_info.get('specifica_allergie'):
+        righe.append(f"• Allergie Note: {paziente_info.get('specifica_allergie')}")
+    else:
+        righe.append("• Allergie: Nessuna nota/riferita")
+        
+    tabagismo_str = paziente_info.get('tabagismo', 'Non fumatore')
+    if tabagismo_str == "Fumatore attivo":
+        tabagismo_str += f" ({paziente_info.get('sig_die', 0)} sigarette/die)"
+    righe.append(f"• Tabagismo: {tabagismo_str}")
+    
+    righe.append(f"• Funzionalità Renale: Creatinina {paziente_info.get('creatinina', 'N/D')} mg/dL | eGFR {paziente_info.get('egfr', 'N/D')} mL/min")
+    
+    if paziente_info.get('caregiver') and paziente_info.get('caregiver') != "Non valutato":
+        righe.append(f"• Rete di Supporto / Caregiver: {paziente_info.get('caregiver')}")
+        
+    # Familiarità e Genetica
+    fam = paziente_info.get('familiarita', [])
+    if fam:
+        righe.append(f"• Familiarità Oncologica: {', '.join(fam)}")
+        
+    gen = paziente_info.get('genetica', [])
+    if gen:
+        righe.append(f"• Profilo Genetico / Mutazionale: {', '.join(gen)}")
+        
+    # Chirurgica e Farmacologica
+    interventi = paziente_info.get('interventi', '')
+    if interventi:
+        righe.append(f"• Anamnesi Chirurgica: {interventi}")
+        
+    farmacologica = paziente_info.get('farmacologica', '')
+    if farmacologica:
+        righe.append(f"• Terapia Farmacologica Attuale: {farmacologica}")
+        
+    return "\n".join(righe)
