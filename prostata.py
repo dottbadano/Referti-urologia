@@ -193,7 +193,6 @@ def render_modulo():
     if modalita == "1. Prima Visita: Inquadramento Bioptico & Rischio":
         st.subheader("📋 Inquadramento Clinico & Anamnesi Globale (Prostata)")
 
-        # Richiamo del modulo unificato centralizzato (Sigla organo: "P" per Prostata)
         paziente_info = render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="prostata")
         
         nome_p = paziente_info["nome"]
@@ -202,7 +201,6 @@ def render_modulo():
         data_nascita_p = datetime.strptime(paziente_info["data_nascita"], "%Y-%m-%d").date()
         totale_g8 = paziente_info["g8_score"]
         
-        # Formattazione per la stampa PDF pulita ed esclusiva dei campi compilati
         anamnesi_ordinata_pdf = formatta_anamnesi_per_pdf_unificata(paziente_info)
 
         st.divider()
@@ -259,7 +257,7 @@ def render_modulo():
 
                 blocco_anamnesi_str = f"\nAnamnesi e Profilo Clinico:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
                 
-                dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_num}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}\n• Charlson Index (Corretto): {paziente_info['charlson_score']}\n• Screening G8: {totale_g8}/17{blocco_anamnesi_str}"
+                dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_basale}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}\n• Charlson Index (Corretto): {paziente_info['charlson_score']}\n• Screening G8: {totale_g8}/17{blocco_anamnesi_str}"
 
                 dati_v = {
                     "data": str(datetime.today().date()),
