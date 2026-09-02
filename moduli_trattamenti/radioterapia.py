@@ -1,117 +1,191 @@
 from datetime import datetime
 import streamlit as st
-from utils import genera_pdf_referto, salva_db_pazienti
+from utils import (
+    carica_db_pazienti,
+    salva_db_pazienti,
+    genera_pdf_referto,
+    ELENCO_MESI
+)
 
-def render_radioterapia(paziente, db_attivo, codice_search):
-    """Modulo dedicato alla gestione e follow-up del trattamento Radioterapico con dettagli sui farmaci LH-RH e ARSI."""
-    st.markdown("### 🟡 Protocollo di Radioterapia")
-    st.info("Gestione del trattamento radioterapico, impostazione della dose, terapia ormonale associata con selezione specifica e ARSI, e monitoraggio biochimico con criteri di Phoenix (Nadir + 2 ng/mL).")
+def calcola_criteri_phoenix(nadir_psa, psa_attuale, storia_psa):
+    """
+    Criteri Phoenix (ASTRO/RTOG): Recidiva biochimica post-radioterapia 
+    definita come un incremento del PSA pari o superiore al nadir + 2.0 ng/ml.
+    """
+    if nadir_psa is None:
+        return False, "Nadir non ancora registrato."
     
-    # Sezione di monitoraggio PSA e calcolo Phoenix posta FUORI dal form per reattività immediata
-    st.markdown("#### 📈 Monitoraggio PSA e Criteri di Recidiva (Phoenix)")
-    st.write("Il cut-off di ripresa biochimica post-radioterapia è definito secondo i **Criteri di Phoenix** come **Nadir + 2.0 ng/mL**.")
-    
-    col_psa_rt1, col_psa_rt2, col_psa_rt3 = st.columns(3)
-    with col_psa_rt1:
-        valore_nadir = st.number_input("Valore Nadir PSA raggiunto (ng/mL)", min_value=0.0, max_value=50.0, value=0.0, step=0.01, key="rt_nadir")
-    with col_psa_rt2:
-        valore_psa_attuale_rt = st.number_input("Valore PSA Attuale di Controllo (ng/mL)", min_value=0.0, max_value=50.0, value=0.0, step=0.01, key="rt_psa_att")
-    with col_psa_rt3:
-        soglia_phoenix = valore_nadir + 2.0
-        st.metric("Soglia Critica di Recidiva (Nadir + 2)", f"{soglia_phoenix:.2f} ng/mL")
-
-    allerta_phoenix = False
-    if valore_nadir > 0 and valore_psa_attuale_rt >= soglia_phoenix:
-        allerta_phoenix = True
-        st.error(f"🚨 **ALLERTA BIOCHIMICA (Criteri di Phoenix)**: Il PSA attuale ({valore_psa_attuale_rt} ng/mL) supera la soglia critica di Nadir + 2 ng/mL ({soglia_phoenix:.2f} ng/mL). Sospetta recidiva biochimica.")
+    soglia_recidiva = nadir_psa + 2.0
+    if psa_attuale >= soglia_recidiva:
+        return True, f"⚠️ RECIDIVA BIOCHIMICA (Criteri Phoenix): PSA attuale ({psa_attuale} ng/ml) >= Nadir ({nadir_psa} ng/ml) + 2.0 ng/ml (Soglia: {soglia_recidiva:.2f} ng/ml)."
     else:
-        st.success("✅ Valore di PSA sotto la soglia di fallimento biochimico di Phoenix.")
+        return False, f"🟢 PSA sotto soglia Phoenix (Nadir: {nadir_psa} ng/ml, Soglia allerta: {soglia_recidiva:.2f} ng/ml)."
 
-    st.markdown("---")
+def render_followup_radioterapia():
+    st.subheader("⚡ Follow-up Dedicato: Post-Radioterapia (RT)")
+    
+    db_file = carica_db_pazienti()
+    codice_search = st.text_input("Inserisci Codice Univoco Paziente:", key="search_fu_rt").strip().upper()
 
-    with st.form(key="form_radioterapia"):
-        st.markdown("#### ⚡ Caratteristiche del Trattamento Radioterapico")
-        
+    if not codice_search:
+        st.warning("⚠️ Inserisci il codice univoco del paziente per accedere al follow-up radioterapico.")
+        return
+
+    if codice_search not in db_file:
+        st.error(f"❌ Nessun paziente trovato con il codice `{codice_search}`.")
+        return
+
+    paziente = db_file[codice_search]
+    st.success(f"Paziente Trovato: **{paziente.get('cognome', '')} {paziente.get('nome', '')}** (ID: `{codice_search}`)")
+    st.info("🎯 **Protocollo Attivo:** Follow-up Post-Radioterapia")
+
+    # Dettagli del Trattamento Radioterapico (Baseline)
+    with st.expander("📋 Dettagli Trattamento Radioterapico & Terapia Sistemica (Baseline)", expanded=False):
         col_rt1, col_rt2, col_rt3 = st.columns(3)
         with col_rt1:
-            tipo_rt = st.selectbox("Tipologia di Frazionamento", ["Standard", "Ipofrazionata moderata", "Ipofrazionata ultra (5 sedute)", "Single Treatment (SBRT/HDR)"], key="rt_tipo")
+            schema_rt = st.selectbox(
+                "Schema Radioterapico:",
+                [
+                    "Convenzionale / Frazionamento Standard",
+                    "Ipofrazionato Moderato",
+                    "Stereotassico / SBRT Ultra-ipofrazionato (5 sedute)",
+                    "Altro / Brachiterapia"
+                ],
+                key="rt_schema"
+            )
         with col_rt2:
-            dose_gy = st.number_input("Dose Totale (Gy)", min_value=0.0, max_value=100.0, value=0.0, step=0.5, key="rt_gy")
+            dose_gy = st.number_input("Dose Totale (Gy):", min_value=0.0, max_value=100.0, value=78.0, step=0.5, key="rt_gy")
         with col_rt3:
-            classe_rischio = st.selectbox("Classe di Rischio NCCN/EAU", ["Basso Rischio", "Intermedio Favorevole", "Intermedio Sfavorevole", "Alto Rischio", "Molto Alto Rischio"], key="rt_rischio")
+            trattamento_linfonodi = st.selectbox("Irradiazione Linfonodale:", ["No", "Sì (Pelvici / Selettivi)"], key="rt_ln")
 
-        st.markdown("---")
-        st.markdown("#### 💉 Terapia Ormonale e Associazione ARSI")
-        
-        col_LHRH1, col_LHRH2, col_LHRH3 = st.columns(3)
-        with col_LHRH1:
-            fatto_lhrh = st.selectbox("Terapia LH-RH eseguita?", ["No", "Sì"], key="rt_lhrh_check")
-        with col_LHRH2:
-            tipo_lhrh = st.selectbox("Molecola LH-RH", ["Nessuna", "Triptorelina", "Leuprorelina", "Relugolix"], key="rt_tipo_lhrh")
-        with col_LHRH3:
-            data_inizio_lhrh = st.date_input("Data di inizio terapia LH-RH", value=datetime.today(), key="rt_lhrh_data")
-
-        col_arsi1, col_arsi2 = st.columns(2)
-        with col_arsi1:
-            usa_arsi = st.selectbox("Associazione con ARSI (Androgen Receptor Signaling Inhibitor)?", ["No", "Sì"], key="rt_arsi_check")
-        with col_arsi2:
-            tipo_arsi = st.selectbox("Molecola ARSI", ["Nessuna", "Apalutamide", "Darolutamide", "Enzalutamide", "Abiraterone"], key="rt_tipo_arsi")
-
-        if fatto_lhrh == "Sì":
-            if "Basso" in classe_rischio:
-                st.info("ℹ️ **Linee Guida**: Per i pazienti a basso rischio, la terapia ormonale neoadiuvante/adiuvante non è solitamente raccomandata.")
-            elif "Intermedio" in classe_rischio:
-                st.info("ℹ️ **Linee Guida (Rischio Intermedio)**: Raccomandata terapia ormonale a breve termine (4-6 mesi).")
-            elif "Alto" in classe_rischio or "Molto Alto" in classe_rischio:
-                st.warning("⚠️ **Linee Guida (Alto/Molto Alto Rischio)**: Raccomandata terapia ormonale a lungo termine (18-36 mesi).")
-
-        st.markdown("---")
-        st.markdown("#### 📅 Tabella di Scadenziario Follow-up PSA Post-Radioterapia")
-        st.markdown("""
-        | Tempistica Controllo | Obiettivo Clinico |
-        | :--- | :--- |
-        | **3 - 6 Mesi** | Prima valutazione di tendenza del PSA post-trattamento |
-        | **Ogni 6 Mesi (per i primi 3 anni)** | Monitoraggio ravvicinato del trend e ricerca del Nadir |
-        | **Ogni 12 Mesi (dal 4° anno in poi)** | Follow-up a lungo termine |
-        """)
-
-        st.markdown("---")
-        note_rt = st.text_area("Note cliniche e raccomandazioni radioterapiche:", key="rt_note")
-        
-        submit_rt = st.form_submit_button("💾 Salva Dati Radioterapia", type="primary")
-        
-        if submit_rt:
-            dettagli_rt = (
-                f"Radioterapia - Tipo: {tipo_rt}, Dose: {dose_gy} Gy, Rischio: {classe_rischio} | "
-                f"Terapia LH-RH: {fatto_lhrh} (Molecola: {tipo_lhrh}, Inizio: {data_inizio_lhrh if fatto_lhrh=='Sì' else 'N/A'}) | "
-                f"ARSI: {usa_arsi} (Molecola: {tipo_arsi}) | "
-                f"Nadir: {valore_nadir} ng/mL, PSA Attuale: {valore_psa_attuale_rt} ng/mL "
-                f"{'(ATTIVATA ALLERTA PHOENIX NADIR+2)' if allerta_phoenix else '(Sotto soglia Phoenix)'}\n"
-                f"Note: {note_rt}"
+        col_ter1, col_ter2 = st.columns(2)
+        with col_ter1:
+            terapia_lhrh = st.selectbox(
+                "Terapia con LHRH (Agonista/Antagonista):",
+                ["Non associata", "Leuprorelina", "Triptorelina", "Relugolix"],
+                key="rt_lhrh"
             )
-            dati_v_rt = {
+        with col_ter2:
+            terapia_arsi = st.selectbox(
+                "Inibitore del Recettore degli Androgeni (ARSI):",
+                ["Non associato", "Apalutamide", "Darolutamide", "Enzalutamide", "Abiraterone"],
+                key="rt_arsi"
+            )
+
+    # Gestione del Nadir PSA nel profilo paziente
+    if "nadir_psa" not in paziente:
+        paziente["nadir_psa"] = None
+
+    # Visualizzazione Storico Visite
+    with st.expander("📂 Visualizza Storico Visite e Controlli RT Precedenti", expanded=False):
+        visite = paziente.get("visite", [])
+        if not visite:
+            st.write("Nessuna visita registrata nello storico.")
+        for idx, v in enumerate(visite, 1):
+            st.markdown(f"**Controllo {idx} — Data: {v.get('data')} | Tipo: {v.get('tipo')}**")
+            st.text(v.get('dettagli', 'Nessun dettaglio'))
+            st.markdown("---")
+
+    st.markdown("---")
+    st.markdown("### 🔄 Nuova Valutazione / Controllo Post-RT")
+
+    with st.form("form_nuova_valutazione_rt"):
+        col_psa1, col_psa2, col_psa3 = st.columns(3)
+        with col_psa1:
+            mese_psa_a = st.selectbox("Mese Prelievo PSA", ELENCO_MESI, index=datetime.today().month - 1)
+        with col_psa2:
+            anno_psa_a = st.number_input("Anno Prelievo PSA", min_value=2000, max_value=2030, value=datetime.today().year)
+        with col_psa3:
+            psa_attuale = st.number_input("Valore PSA Attuale (ng/ml):", min_value=0.0, value=float(paziente.get("ultimo_psa", 0.0)), step=0.001, format="%.3f")
+
+        note_cliniche_fu = st.text_area("Dettagli clinici della visita, tossicità genito-urinaria/intestinale o annotazioni:")
+
+        scelta_fine_visita = st.selectbox(
+            "Decisione presa a fine visita (Aggiornamento Percorso):",
+            [
+                "Prosegue Follow-up Biochimico RT",
+                "Approfondimento di Stadiazione (PET-Cholina / PSMA)",
+                "Terapia Medica di Salvataggio / OME"
+            ]
+        )
+
+        submitted = st.form_submit_button("💾 Salva Nuova Valutazione & Genera Referto PDF", type="primary")
+
+        if submitted:
+            num_mese_a = ELENCO_MESI.index(mese_psa_a) + 1
+            data_psa_attuale = datetime(anno_psa_a, num_mese_a, 1).date()
+
+            # Aggiornamento logica Nadir PSA
+            nadir_attuale = paziente.get("nadir_psa")
+            if nadir_attuale is None or psa_attuale < nadir_attuale:
+                paziente["nadir_psa"] = psa_attuale
+                nadir_utilizzato = psa_attuale
+            else:
+                nadir_utilizzato = nadir_attuale
+
+            paziente["ultimo_psa"] = psa_attuale
+            paziente["data_ultimo_psa"] = str(data_psa_attuale)
+            paziente["percorso_scelto"] = scelta_fine_visita
+
+            # Valutazione Criteri Phoenix
+            is_recidiva, messaggio_phoenix = calcola_criteri_phoenix(paziente["nadir_psa"], psa_attuale, paziente.get("visite", []))
+
+            dettagli_fu = (
+                f"Controllo Post-Radioterapia\n"
+                f"• Schema: {schema_rt} ({dose_gy} Gy), Linfonodi: {trattamento_linfonodi}\n"
+                f"• Terapia Sistemica: LHRH ({terapia_lhrh}) | ARSI ({terapia_arsi})\n"
+                f"• PSA: {psa_attuale:.3f} ng/ml ({mese_psa_a} {anno_psa_a}) | Nadir: {nadir_utilizzato:.3f} ng/ml\n"
+                f"• Esito Phoenix: {messaggio_phoenix}\n"
+                f"• Decisione Finale: {scelta_fine_visita}"
+            )
+            if note_cliniche_fu:
+                dettagli_fu += f"\n• Note Cliniche: {note_cliniche_fu}"
+
+            dati_nuova_visita = {
                 "data": str(datetime.today().date()),
-                "tipo": "Follow-up Radioterapia",
-                "dettagli": dettagli_rt
+                "tipo": f"Controllo RT ({scelta_fine_visita})",
+                "dettagli": dettagli_fu
             }
-            if "visite" not in paziente:
-                paziente["visite"] = []
-            paziente["visite"].append(dati_v_rt)
-            salva_db_pazienti(db_attivo)
-            st.success("Dati di radioterapia salvati correttamente!")
 
-            pdf_bytes = genera_pdf_referto(
-                codice_search, 
-                dati_v_rt, 
-                percorso="Monitoraggio post-trattamento radioterapico", 
-                note_raccomandazioni=[note_rt], 
-                nome=paziente['nome'], 
-                cognome=paziente['cognome']
-            )
-            st.download_button(
-                label="📥 Scarica Referto / Verbale in PDF",
-                data=pdf_bytes,
-                file_name=f"Report_Radioterapia_{codice_search}_{datetime.today().date()}.pdf",
-                mime="application/pdf",
-                key="download_pdf_radioterapia"
-            )
+            paziente["visite"].append(dati_nuova_visita)
+            salva_db_pazienti(db_file)
+            st.session_state["ultimo_paziente_fu_rt"] = codice_search
+            st.success("✅ Nuova valutazione radioterapica salvata correttamente nello storico!")
+
+    # Box Alert Dinamico per Criteri Phoenix
+    if "nadir_psa" in paziente and paziente["nadir_psa"] is not None:
+        is_rec_alert, msg_alert = calcola_criteri_phoenix(paziente["nadir_psa"], paziente.get("ultimo_psa", 0.0), paziente.get("visite", []))
+        if is_rec_alert:
+            st.error(f"⚠️ **{msg_alert}**")
+        else:
+            st.success(f"🟢 **{msg_alert}**")
+
+    # Gestione download referto aggiornato
+    if st.session_state.get("ultimo_paziente_fu_rt"] == codice_search and paziente["visite"]:
+        ultima_visita = paziente["visite"][-1]
+        
+        note_pdf = [
+            f"Schema RT: {schema_rt} ({dose_gy} Gy) | Linfonodi: {trattamento_linfonodi}",
+            f"Terapia associata: LHRH ({terapia_lhrh}), ARSI ({terapia_arsi})",
+            f"Nadir PSA: {paziente.get('nadir_psa')} ng/ml",
+            f"Decisione di fine visita: {scelta_fine_visita}",
+            note_cliniche_fu
+        ]
+        note_pdf = [n for n in note_pdf if n]
+        
+        pdf_bytes = genera_pdf_referto(
+            codice_search, 
+            ultima_visita, 
+            scelta_fine_visita, 
+            note_pdf, 
+            nome=paziente.get('nome', ''), 
+            cognome=paziente.get('cognome', '')
+        )
+        
+        st.download_button(
+            label="📄 Scarica Referto Post-Radioterapia in PDF",
+            data=pdf_bytes,
+            file_name=f"Referto_Radioterapia_{codice_search}.pdf",
+            mime="application/pdf",
+            key="download_pdf_rt_aggiornato"
+        )
