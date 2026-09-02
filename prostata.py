@@ -88,13 +88,7 @@ def ottieni_db_aggiornato():
     return st.session_state["db_pazienti"]
 
 def stima_aspettativa_vita_charlson(data_nascita, charlson_score):
-    """
-    Stima orientativa dell'aspettativa di vita basata su tabelle di mortalità generale integrate
-    con il Charlson Comorbidity Index (CCI).
-    """
     eta = (datetime.today().date() - data_nascita).days // 365
-    
-    # Stima di base della sopravvivenza media residua in base all'età (Italia/ISTAT approx)
     if eta < 60:
         base_anni = 25
     elif eta < 65:
@@ -108,7 +102,6 @@ def stima_aspettativa_vita_charlson(data_nascita, charlson_score):
     else:
         base_anni = 5
         
-    # Riduzione stimata per comorbidità (circa 2-3 anni persi per ogni punto di Charlson corretto)
     aspettativa_stimata = max(1, base_anni - (charlson_score * 2.5))
     return round(aspettativa_stimata, 1), eta
 
@@ -227,18 +220,15 @@ def render_modulo():
         totale_g8 = paziente_info["g8_score"]
         charlson_score = paziente_info["charlson_score"]
         
-        # Stima dell'aspettativa di vita in base all'età e al Charlson Score corretto
         aspettativa_vita, eta_paziente = stima_aspettativa_vita_charlson(data_nascita_p, charlson_score)
 
-        # BOX ALERT EVIDENTE PER ASPETTATIVA DI VITA < 10 ANNI
         st.markdown("---")
         if aspettativa_vita < 10.0:
             st.error(
                 f"🚨 **ATTENZIONE CLINICA CRITICA (Aspettativa di Vita Stimata: < 10 Anni | Età: {eta_paziente} aa, Charlson Corretto: {charlson_score})**\n\n"
                 f"L'aspettativa di vita residua stimata è inferiore a 10 anni. "
                 f"In conformità alle Linee Guida oncologiche internazionali, **NON SUSSISTE INDICAZIONE A TRATTAMENTI CHIRURGICI AGGRESSIVI O A FINALITÀ RADICALE** (es. Prostatectomia Radicale), "
-                f"poiché i rischi operatori e la mortalità non correlata al cancro superano il beneficio atteso. "
-                f"Si raccomanda di orientare la scelta clinica verso protocolli di osservazione, sorveglianza conservativa o trattamenti palliativi/di supporto."
+                f"poiché i rischi operatori e la mortalità non correlata al cancro superano il beneficio atteso."
             )
         else:
             st.success(
@@ -288,8 +278,6 @@ def render_modulo():
 
         st.markdown("---")
         
-        # LOGICA AGGIORNATA PER LE OPZIONI TERAPEUTICHE:
-        # Se Basso Rischio o Rischio Intermedio Favorevole -> NON mostrare Terapia Medica tra le opzioni iniziali
         if necessita_stadiazione:
             opzioni_trattamento = ["In attesa di Stadiazione (DMT)"]
         else:
@@ -300,9 +288,19 @@ def render_modulo():
 
         scelta_trattamento = st.selectbox("Trattamento Proposto / Concordato:", opzioni_trattamento)
 
+        # GESTIONE CHECKBOX / SBAFFO PER PAZIENTI CON CHARLSON > 7 / ASPETTATIVA < 10 ANNI SCELTI PER CHIRURGIA
+        conferma_eccezione_chirurgia = False
+        if charlson_score > 7 and aspettativa_vita < 10.0 and "Chirurgia" in scelta_trattamento:
+            st.warning("⚠️ **Attenzione:** Il paziente presenta un Charlson Score > 7 e un'aspettativa di vita stimata < 10 anni, ma è stata selezionata l'opzione chirurgica.")
+            conferma_eccezione_chirurgia = st.checkbox(
+                "Consapevole dell'aspettativa di vita < 10 anni si decide in assenso col paziente per intervento chirurgico"
+            )
+
         if st.button("💾 Salvataggio & Genera Report PDF (Prima Visita)", type="primary"):
             if not nome_p or not cognome_p or not codice_paziente:
                 st.error("Inserire Nome, Cognome e Codice Univoco del paziente.")
+            elif charlson_score > 7 and aspettativa_vita < 10.0 and "Chirurgia" in scelta_trattamento and not conferma_eccezione_chirurgia:
+                st.error("❌ Errore: Per procedere con la chirurgia in un paziente con Charlson > 7 e aspettativa < 10 anni, è obbligatorio selezionare la spunta di deroga/consapevolezza clinica.")
             else:
                 salva_paziente_su_drive(
                     nome=nome_p,
@@ -312,7 +310,11 @@ def render_modulo():
                 )
 
                 blocco_anamnesi_str = f"\nAnamnesi e Profilo Clinico:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
-                dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_basale}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}\n• Charlson Index (Corretto): {charlson_score}\n• Aspettativa di Vita Stimata: ~{aspettativa_vita} anni\n• Screening G8: {totale_g8}/17{blocco_anamnesi_str}"
+                dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_basale}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}\n• Charlson Index (Corretto): {charlson_score}\n• Aspettativa di Vita Stimata: ~{aspettativa_vita} anni\n• Screening G8: {totale_g8}/17"
+                if conferma_eccezione_chirurgia:
+                    dettagli_str += "\n• NOTA DEROGA CLINICA: Consapevole dell'aspettativa di vita < 10 anni si decide in assenso col paziente per intervento chirurgico."
+                if blocco_anamnesi_str:
+                    dettagli_str += blocco_anamnesi_str
 
                 dati_v = {
                     "data": str(datetime.today().date()),
@@ -352,8 +354,8 @@ def render_modulo():
                 f"Charlson Index corretto: {charlson_score}",
                 f"Aspettativa di vita stimata: ~{aspettativa_vita} anni"
             ]
-            if aspettativa_vita < 10.0:
-                note_pdf_list.append("ATTENZIONE CLINICA: Aspettativa di vita stimata < 10 anni. Non indicazione a chirurgia radicale.")
+            if conferma_eccezione_chirurgia:
+                note_pdf_list.append("NOTA DEROGA CLINICA: Consapevole dell'aspettativa di vita < 10 anni si decide in assenso col paziente per intervento chirurgico.")
             
             if anamnesi_ordinata_pdf:
                 note_pdf_list.append(f"Anamnesi:\n{anamnesi_ordinata_pdf}")
@@ -416,6 +418,9 @@ def render_modulo():
                     opzioni_definitivo = ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia", "Terapia Medica / Ormonale (ADT / NHA)"]
 
                 nuovo_trattamento = st.selectbox("Selezione Trattamento Definitivo Concordato:", opzioni_definitivo)
+                
+                # Valutazione Charlson salvato o calcolato per la rivalutazione
+                # Nota: recuperiamo l'anagrafica se presente o stimiamo dai dati registrati
                 nota_dmt = st.text_area("Note della Discussione Multidisciplinare (DMT) / Motivazione clinica:")
                     
                 if st.button("💾 Salva Rivalutazione & Genera Referto DMT", type="primary"):
