@@ -24,7 +24,7 @@ def genera_codice_univoco_organo(nome, cognome, organo_lettera="P"):
 
 def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
     """
-    Modulo unificato riorganizzato secondo le specifiche cliniche oncologiche e geriatriche.
+    Modulo unificato con inclusione del Charlson Comorbidity Index dopo la valutazione geriatrica.
     """
     st.markdown("### 📋 Anagrafica & Identificazione")
     
@@ -116,6 +116,57 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
         valore_mmse = ""
         if esegue_mmse:
             valore_mmse = st.text_input("Punteggio MMSE (es. 28/30)", key=f"{prefix}_valore_mmse")
+
+    st.markdown("---")
+    st.markdown("### 📊 Charlson Comorbidity Index (CCI)")
+    with st.expander("Seleziona comorbilità attive per calcolo Charlson", expanded=False):
+        c_infarto = st.checkbox("Infarto miocardico pregresso (+1)", key=f"{prefix}_c_infarto")
+        c_ scompenso = st.checkbox("Scompenso cardiaco congestizio (+1)", key=f"{prefix}_c_scompenso")
+        c_vascolare = st.checkbox("Malattia vascolare periferica (+1)", key=f"{prefix}_c_vascolare")
+        c_ cerebrovascolare = st.checkbox("Malattia cerebrovascolare / TIA (+1)", key=f"{prefix}_c_cerebrovascolare")
+        c_demenza = st.checkbox("Demenza (+1)", key=f"{prefix}_c_demenza")
+        c_bpco = st.checkbox("Malattia polmonare cronica (BPCO) (+1)", key=f"{prefix}_c_bpco")
+        c_connettivite = st.checkbox("Malattia del tessuto connettivo / Reumatologica (+1)", key=f"{prefix}_c_connettivite")
+        c_ ulcera = st.checkbox("Ulcera peptica (+1)", key=f"{prefix}_c_ulcera")
+        c_fegato_l = st.checkbox("Malattia epatica lieve (+1)", key=f"{prefix}_c_fegato_l")
+        c_diabete = st.checkbox("Diabete mellito (senza danno d'organo +1 / con danno d'organo +2)", key=f"{prefix}_c_diabete")
+        c_emiplegia = st.checkbox("Emiplegia o paraplegia (+2)", key=f"{prefix}_c_emiplegia")
+        c_renale = st.checkbox("Malattia renale cronica moderata-severa (+2)", key=f"{prefix}_c_renale")
+        c_tumore = st.checkbox("Tumore solido localizzato (+2)", key=f"{prefix}_c_tumore")
+        c_leucemia = st.checkbox("Leucemia o Linfoma (+2)", key=f"{prefix}_c_leucemia")
+        c_fegato_g = st.checkbox("Malattia epatica moderata-severa (+3)", key=f"{prefix}_c_fegato_g")
+        c_metastasi = st.checkbox("Tumore solido metastatico / Malattia disseminata (+6)", key=f"{prefix}_c_metastasi")
+        c_aids = st.checkbox("AIDS / HIV conclamato (+6)", key=f"{prefix}_c_aids")
+
+    # Calcolo base Charlson (pesi clinici standard)
+    base_charlson = 0
+    if c_infarto: base_charlson += 1
+    if c_scompenso: base_charlson += 1
+    if c_vascolare: base_charlson += 1
+    if c_cerebrovascolare: base_charlson += 1
+    if c_demenza: base_charlson += 1
+    if c_bpco: base_charlson += 1
+    if c_connettivite: base_charlson += 1
+    if c_ulcera: base_charlson += 1
+    if c_fegato_l: base_charlson += 1
+    if c_diabete: base_charlson += 1 # standard base 1, aggiustabile se serve
+    if c_emiplegia: base_charlson += 2
+    if c_renale: base_charlson += 2
+    if c_tumore: base_charlson += 2
+    if c_leucemia: base_charlson += 2
+    if c_fegato_g: base_charlson += 3
+    if c_metastasi: base_charlson += 6
+    if c_aids: base_charlson += 6
+
+    # Aggiustamento età per Charlson (1 punto ogni decennio sopra i 50 anni)
+    bonus_eta_charlson = 0
+    if eta >= 50 and eta < 60: bonus_eta_charlson = 1
+    elif eta >= 60 and eta < 70: bonus_eta_charlson = 2
+    elif eta >= 70 and eta < 80: bonus_eta_charlson = 3
+    elif eta >= 80: bonus_eta_charlson = 4
+
+    charlson_totale = base_charlson + bonus_eta_charlson
+    st.info(f"📈 **Charlson Comorbidity Index (Corretto per Età):** `{charlson_totale}` (Comorbilità: {base_charlson} + Età: {bonus_eta_charlson})")
 
     st.markdown("---")
     st.markdown("### 💊 Allergie, Tabagismo & Funzionalità Renale")
@@ -211,6 +262,7 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
         "gds": gds,
         "mmse_eseguito": esegue_mmse,
         "mmse_valore": valore_mmse.strip(),
+        "charlson_score": charlson_totale,
         "ha_allergie": ha_allergie,
         "specifica_allergie": specifica_allergie.strip(),
         "tabagismo": tabagismo,
@@ -223,61 +275,3 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
         "interventi": interventi.strip(),
         "farmacologica": farmacologica.strip()
     }
-
-def formatta_anamnesi_per_pdf_unificata(dati):
-    """
-    Formatta l'anamnesi stampando ESCLUSIVAMENTE i campi compilati o flaggati.
-    """
-    linee = []
-    
-    if dati.get("bmi") and dati.get("bmi") > 0:
-        linee.append(f"• Parametri Antropometrici: Peso {dati.get('peso')} kg, Altezza {dati.get('altezza')} cm | BMI: {dati.get('bmi')}")
-        
-    if dati.get("ecog") and "Non valutato" not in dati.get("ecog", ""):
-        linee.append(f"• Performance Status (ECOG): {dati['ecog']}")
-        
-    if dati.get("adl") and "Non valutato" not in dati.get("adl", ""):
-        linee.append(f"• Scala ADL: {dati['adl']}")
-        
-    if dati.get("iadl") and "Non valutato" not in dati.get("iadl", ""):
-        linee.append(f"• Scala IADL: {dati['iadl']}")
-        
-    if dati.get("g8_score") is not None:
-        linee.append(f"• Screening G8: {dati['g8_score']}/17")
-        
-    if dati.get("gds") and "Non valutato" not in dati.get("gds", ""):
-        linee.append(f"• Geriatric Depression Scale (GDS): {dati['gds']}")
-        
-    if dati.get("mmse_eseguito") and dati.get("mmse_valore"):
-        linee.append(f"• Test Cognitivo MMSE: {dati['mmse_valore']}")
-        
-    if dati.get("ha_allergie") and dati.get("specifica_allergie"):
-        linee.append(f"• Allergie: {dati['specifica_allergie']}")
-    elif dati.get("ha_allergie"):
-        linee.append("• Allergie: Presenti (Non specificate)")
-        
-    if dati.get("tabagismo"):
-        tab_str = f"• Tabagismo: {dati['tabagismo']}"
-        if dati.get("tabagismo") == "Fumatore attivo" and dati.get("sig_die", 0) > 0:
-            tab_str += f" ({dati['sig_die']} sigarette/die)"
-        linee.append(tab_str)
-        
-    if dati.get("egfr") is not None:
-        linee.append(f"• Funzionalità Renale: Creatinina {dati.get('creatinina')} mg/dL, eGFR: {dati.get('egfr')} mL/min")
-        
-    if dati.get("caregiver") and "Non valutato" not in dati.get("caregiver", ""):
-        linee.append(f"• Caregiver & Rete di Supporto: {dati['caregiver']}")
-        
-    if dati.get("familiarita"):
-        linee.append(f"• Familiarità Oncologica (Organi): {', '.join(dati['familiarita'])}")
-        
-    if dati.get("genetica"):
-        linee.append(f"• Profilo Genetico / Mutazionale: {', '.join(dati['genetica'])}")
-        
-    if dati.get("interventi"):
-        linee.append(f"• Anamnesi Chirurgica: {dati['interventi']}")
-        
-    if dati.get("farmacologica"):
-        linee.append(f"• Anamnesi Farmacologica: {dati['farmacologica']}")
-        
-    return "\n".join(linee) if linee else ""
