@@ -14,8 +14,8 @@ from anamnesi_comune import (
     formatta_anamnesi_per_pdf_unificata
 )
 
-# Import dei moduli di follow-up dedicati per alleggerire e ottimizzare le prestazioni
-from moduli_trattamenti import (
+# Import aggiornato puntando alla cartella/package moduli_trattamenti
+from moduli_trattamenti.moduli_trattamenti import (
     render_followup_sorveglianza_avanzato,
     render_followup_chirurgia_avanzato,
     render_followup_radioterapia_avanzato,
