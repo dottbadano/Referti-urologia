@@ -87,22 +87,45 @@ def ottieni_db_aggiornato():
         st.session_state["db_pazienti"].update(db_file)
     return st.session_state["db_pazienti"]
 
-def stima_aspettativa_vita_charlson(data_nascita, charlson_score):
+def stima_aspettativa_vita_charlson(data_nascita, charlson_score, ecog_score=0, adl_score=6, iadl_score=8, g8_score=17, gds_score=0):
     eta = (datetime.today().date() - data_nascita).days // 365
+    
+    # Base di sopravvivenza attuariale per soggetti sani (Charlson = 0)
     if eta < 60:
-        base_anni = 25
+        base_anni = 30
     elif eta < 65:
-        base_anni = 20
+        base_anni = 25
     elif eta < 70:
-        base_anni = 15
+        base_anni = 20
     elif eta < 75:
-        base_anni = 11
+        base_anni = 16
     elif eta < 80:
-        base_anni = 8
+        base_anni = 11
     else:
-        base_anni = 5
+        base_anni = 7
         
-    aspettativa_stimata = max(1, base_anni - (charlson_score * 2.5))
+    # Riduzione basata sul Charlson Index
+    penalizzazione = charlson_score * 2.0
+    
+    # Penalizzazione addizionale basata sullo stato funzionale e geriatrico multidimensionale
+    if ecog_score >= 2:
+        penalizzazione += 3.0
+    elif ecog_score == 1:
+        penalizzazione += 1.0
+        
+    if adl_score < 6:
+        penalizzazione += (6 - adl_score) * 2.0
+        
+    if iadl_score < 8:
+        penalizzazione += (8 - iadl_score) * 0.5
+        
+    if g8_score <= 14:
+        penalizzazione += 2.0
+        
+    if gds_score >= 6:
+        penalizzazione += 1.5
+
+    aspettativa_stimata = max(2, base_anni - penalizzazione)
     return round(aspettativa_stimata, 1), eta
 
 def calcola_psadt(psa_precedente, data_precedente_str, psa_attuale, data_attuale):
@@ -219,20 +242,36 @@ def render_modulo():
         data_nascita_p = datetime.strptime(paziente_info["data_nascita"], "%Y-%m-%d").date()
         totale_g8 = paziente_info["g8_score"]
         charlson_score = paziente_info["charlson_score"]
-        
-        aspettativa_vita, eta_paziente = stima_aspettativa_vita_charlson(data_nascita_p, charlson_score)
+
+        st.markdown("---")
+        st.subheader("🏋️ Parametri di Performance Status & Valutazione Oncogeriatrica")
+        col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
+        with col_g1:
+            ecog_score = st.selectbox("ECOG Status", [0, 1, 2, 3, 4], index=0)
+        with col_g2:
+            adl_score = st.selectbox("ADL (0-6)", [0, 1, 2, 3, 4, 5, 6], index=6)
+        with col_g3:
+            iadl_score = st.selectbox("IADL (0-8)", [0, 1, 2, 3, 4, 5, 6, 7, 8], index=8)
+        with col_g4:
+            gds_score = st.slider("GDS (Depressione 0-15)", min_value=0, max_value=15, value=0)
+        with col_g5:
+            st.metric("Screening G8", f"{totale_g8}/17")
+
+        aspettativa_vita, eta_paziente = stima_aspettativa_vita_charlson(
+            data_nascita_p, charlson_score, ecog_score, adl_score, iadl_score, totale_g8, gds_score
+        )
 
         st.markdown("---")
         if aspettativa_vita < 10.0:
             st.error(
-                f"🚨 **ATTENZIONE CLINICA CRITICA (Aspettativa di Vita Stimata: < 10 Anni | Età: {eta_paziente} aa, Charlson Corretto: {charlson_score})**\n\n"
+                f"🚨 **ATTENZIONE CLINICA CRITICA (Aspettativa di Vita Stimata: < 10 Anni | Età: {eta_paziente} aa, Charlson: {charlson_score}, ECOG: {ecog_score}, G8: {totale_g8})**\n\n"
                 f"L'aspettativa di vita residua stimata è inferiore a 10 anni. "
                 f"In conformità alle Linee Guida oncologiche internazionali, **NON SUSSISTE INDICAZIONE A TRATTAMENTI CHIRURGICI AGGRESSIVI O A FINALITÀ RADICALE** (es. Prostatectomia Radicale), "
                 f"poiché i rischi operatori e la mortalità non correlata al cancro superano il beneficio atteso."
             )
         else:
             st.success(
-                f"✅ **Valutazione Aspettativa di Vita:** Stimata a **~{aspettativa_vita} anni** (Età: {eta_paziente} aa, Charlson Corretto: {charlson_score}). "
+                f"✅ **Valutazione Aspettativa di Vita:** Stimata a **~{aspettativa_vita} anni** (Età: {eta_paziente} aa, Charlson: {charlson_score}, ECOG: {ecog_score}). "
                 f"Il paziente rientra nei criteri di idoneità per trattamenti a finalità radicale."
             )
         st.markdown("---")
@@ -289,8 +328,8 @@ def render_modulo():
         scelta_trattamento = st.selectbox("Trattamento Proposto / Concordato:", opzioni_trattamento)
 
         conferma_eccezione_chirurgia = False
-        if charlson_score > 7 and aspettativa_vita < 10.0 and "Chirurgia" in scelta_trattamento:
-            st.warning("⚠️ **Attenzione:** Il paziente presenta un Charlson Score > 7 e un'aspettativa di vita stimata < 10 anni, ma è stata selezionata l'opzione chirurgica.")
+        if aspettativa_vita < 10.0 and "Chirurgia" in scelta_trattamento:
+            st.warning("⚠️ **Attenzione:** L'aspettativa di vita stimata del paziente è < 10 anni, ma è stata selezionata l'opzione chirurgica.")
             conferma_eccezione_chirurgia = st.checkbox(
                 "Consapevole dell'aspettativa di vita < 10 anni si decide in assenso col paziente per intervento chirurgico"
             )
@@ -298,8 +337,8 @@ def render_modulo():
         if st.button("💾 Salvataggio & Genera Report PDF (Prima Visita)", type="primary"):
             if not nome_p or not cognome_p or not codice_paziente:
                 st.error("Inserire Nome, Cognome e Codice Univoco del paziente.")
-            elif charlson_score > 7 and aspettativa_vita < 10.0 and "Chirurgia" in scelta_trattamento and not conferma_eccezione_chirurgia:
-                st.error("❌ Errore: Per procedere con la chirurgia in un paziente con Charlson > 7 e aspettativa < 10 anni, è obbligatorio selezionare la spunta di deroga/consapevolezza clinica.")
+            elif aspettativa_vita < 10.0 and "Chirurgia" in scelta_trattamento and not conferma_eccezione_chirurgia:
+                st.error("❌ Errore: Per procedere con la chirurgia con un'aspettativa < 10 anni, è obbligatorio selezionare la spunta di deroga/consapevolezza clinica.")
             else:
                 salva_paziente_su_drive(
                     nome=nome_p,
@@ -309,7 +348,15 @@ def render_modulo():
                 )
 
                 blocco_anamnesi_str = f"\nAnamnesi e Profilo Clinico:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
-                dettagli_str = f"Parametri Prostatici:\n• ISUP Group: {isup_basale}\n• Gleason Terziario: {gleason_terziario}\n• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}\n• Charlson Index (Corretto): {charlson_score}\n• Aspettativa di Vita Stimata: ~{aspettativa_vita} anni\n• Screening G8: {totale_g8}/17"
+                dettagli_str = (
+                    f"Parametri Prostatici & Oncogeriatrici:\n"
+                    f"• ISUP Group: {isup_basale}\n• Gleason Terziario: {gleason_terziario}\n"
+                    f"• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n"
+                    f"• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}\n"
+                    f"• Charlson Index: {charlson_score} | ECOG: {ecog_score}\n"
+                    f"• ADL: {adl_score}/6 | IADL: {iadl_score}/8 | G8: {totale_g8}/17 | GDS: {gds_score}/15\n"
+                    f"• Aspettativa di Vita Stimata: ~{aspettativa_vita} anni"
+                )
                 if conferma_eccezione_chirurgia:
                     dettagli_str += "\n• NOTA DEROGA CLINICA: Consapevole dell'aspettativa di vita < 10 anni si decide in assenso col paziente per intervento chirurgico."
                 if blocco_anamnesi_str:
@@ -349,8 +396,9 @@ def render_modulo():
             note_pdf_list = [
                 motivazione_stadiazione, 
                 f"Percorso assegnato: {scelta_trattamento}", 
-                f"Punteggio Screening G8: {totale_g8}/17", 
-                f"Charlson Index corretto: {charlson_score}",
+                f"ECOG: {ecog_score} | ADL: {adl_score}/6 | IADL: {iadl_score}/8",
+                f"Screening G8: {totale_g8}/17 | GDS: {gds_score}/15",
+                f"Charlson Index: {charlson_score}",
                 f"Aspettativa di vita stimata: ~{aspettativa_vita} anni"
             ]
             if conferma_eccezione_chirurgia:
