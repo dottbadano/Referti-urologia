@@ -15,7 +15,8 @@ from anamnesi_comune import (
 )
 
 def genera_testo_patologia(gruppo_rischio, scelta_trattamento):
-    scelta_grassetto = f"**{scelta_trattamento}**"
+    # Sostituisce la dicitura della scelta se l'utente ha selezionato la chirurgia
+    testo_scelta = "Trattamento chirurgico di Prostatectomia Radicale" if scelta_trattamento == "Chirurgia (Post-Prostatectomia)" else scelta_trattamento
     
     if gruppo_rischio == "Basso Rischio":
         base = (
@@ -25,43 +26,44 @@ def genera_testo_patologia(gruppo_rischio, scelta_trattamento):
             "(EAU/NCCN/AIOM) nella classe a Basso Rischio di progressione. "
             "In conformità con le raccomandazioni scientifiche vigenti, si discute con il paziente "
             "l'opzione della Sorveglianza Attiva quale prima scelta raccomandata, "
-            "contestualmente alle alternative terapeutiche a finalità radicale quali la Chirurgia (Prostatectomia Radicale) "
-            "e la Radioterapia. Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per: "
+            "contestualmente alle alternative terapeutiche a finalità radicale quali il trattamento chirurgico di Prostatectomia Radicale "
+            "e la Radioterapia. Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per:\n\n\n"
         )
     elif gruppo_rischio == "Rischio Intermedio Favorevole":
         base = (
             "L'integrazione dei parametri clinico-laboratoristici con i reperti anatomo-patologici "
             "(ISUP Group 2 / Gleason Score 3+4=7 con prevalenza di Pattern 3 e carico bioptico <50%) "
             "definisce una classe di Rischio Intermedio Favorevole ai sensi delle Linee Guida di settore "
-            "(EAU/NCCN). Si pongono in discussione le opzioni terapeutiche a finalità radicale (Prostatectomia Radicale o Radioterapia) "
+            "(EAU/NCCN). Si pongono in discussione le opzioni terapeutiche a finalità radicale (trattamento chirurgico di Prostatectomia Radicale o Radioterapia) "
             "nonché, in presenza di specifici criteri di selezione e dopo un'adeguata informazione, l'opzione della Sorveglianza Attiva. "
-            "Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per: "
+            "Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per:\n\n\n"
         )
     elif gruppo_rischio == "Rischio Intermedio Sfavorevole":
         base = (
             "Il quadro anatomopatologico (ISUP Group 2 con carico bioptico ≥50% ovvero ISUP Group 3 / Gleason Score 4+3=7) "
             "configura una classe di Rischio Intermedio Sfavorevole, per la quale si pone indicazione a completamento stadiativo "
-            "mediante PET/TC con PSMA. Le opzioni terapeutiche validate comprendono la Prostatectomia Radicale "
+            "mediante PET/TC con PSMA. Le opzioni terapeutiche validate comprendono il trattamento chirurgico di Prostatectomia Radicale "
             "o la Radioterapia associata a Deprivazione Androgenica a breve termine. "
-            "Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per: "
+            "Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per:\n\n\n"
         )
     elif "Alto" in gruppo_rischio:
         base = (
             "Caso discusso in sede di DMT Uro-Oncologico. La presenza di fattori prognostici sfavorevoli "
             "(ISUP Group ≥4 / Gleason Score ≥8) colloca il quadro nella categoria ad Alto Rischio. "
             "Si pone indicazione prioritaria a PET/TC con PSMA e successivo approccio terapeutico multimodale "
-            "(Radioterapia con ADT a lungo termine o Prostatectomia Radicale con linfoadenectomia estesa). "
-            "Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per: "
+            "(Radioterapia con ADT a lungo termine o trattamento chirurgico di Prostatectomia Radicale con linfoadenectomia estesa). "
+            "Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per:\n\n\n"
         )
     else:  # Localmente Avanzato
         base = (
             "Alla luce del quadro clinico-strumentale di patologia localmente avanzata, "
             "si raccomanda completamento stadiativo con PET/TC con PSMA e approccio terapeutico integrato "
             "(Radioterapia ad alto dosaggio con ADT a lungo termine o chirurgia in casi selezionati). "
-            "Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per: "
+            "Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per:\n\n\n"
         )
     
-    return base + scelta_grassetto
+    # Restituisce il testo base seguito dalla scelta formattata con tag HTML per aumentare la dimensione del font di +2
+    return base + f"<font size='+2'>{testo_scelta}</font>"
 
 def ottieni_db_aggiornato():
     db_file = carica_db_pazienti()
@@ -168,7 +170,7 @@ def calcola_timing_controllo(percorso, dati):
             }
         return {
             "rec_psa": "PSA Sierico Ultrasensibile di controllo semestrale + Visita Urologica.",
-            "rec_imaging": "Imaging não indicato di routine in assenza di incremento del PSA.",
+            "rec_imaging": "Imaging non indicato di routine in assenza di incremento del PSA.",
             "rec_azione": "Proseguire follow-up oncologico regolare.",
             "alert": "🟢 PSA nei limiti di negatività (<0.20 ng/ml).",
         }
