@@ -60,7 +60,7 @@ scelta_modulo = st.sidebar.radio(
     ]
 )
 
-# Caricamento moduli dinamico tramite la funzione render_modulo()
+# Caricamento moduli d'organo direttamente dalla root principale
 if scelta_modulo == "🧬 Prostata":
     import prostata
     prostata.render_modulo()
