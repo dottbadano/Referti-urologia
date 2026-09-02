@@ -288,7 +288,6 @@ def render_modulo():
 
         scelta_trattamento = st.selectbox("Trattamento Proposto / Concordato:", opzioni_trattamento)
 
-        # GESTIONE CHECKBOX / SBAFFO PER PAZIENTI CON CHARLSON > 7 / ASPETTATIVA < 10 ANNI SCELTI PER CHIRURGIA
         conferma_eccezione_chirurgia = False
         if charlson_score > 7 and aspettativa_vita < 10.0 and "Chirurgia" in scelta_trattamento:
             st.warning("⚠️ **Attenzione:** Il paziente presenta un Charlson Score > 7 e un'aspettativa di vita stimata < 10 anni, ma è stata selezionata l'opzione chirurgica.")
@@ -418,9 +417,6 @@ def render_modulo():
                     opzioni_definitivo = ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia", "Terapia Medica / Ormonale (ADT / NHA)"]
 
                 nuovo_trattamento = st.selectbox("Selezione Trattamento Definitivo Concordato:", opzioni_definitivo)
-                
-                # Valutazione Charlson salvato o calcolato per la rivalutazione
-                # Nota: recuperiamo l'anagrafica se presente o stimiamo dai dati registrati
                 nota_dmt = st.text_area("Note della Discussione Multidisciplinare (DMT) / Motivazione clinica:")
                     
                 if st.button("💾 Salva Rivalutazione & Genera Referto DMT", type="primary"):
