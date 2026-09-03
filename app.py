@@ -1,9 +1,9 @@
 import streamlit as st
 
-# Configurazione pagina Streamlit
+# Configurazione pagina Streamlit (deve essere sempre la prima chiamata Streamlit)
 st.set_page_config(page_title="2gether", layout="wide")
 
-# CSS per rendere l'intera riga del checkbox (testo compreso) interamente cliccabile
+# CSS globale per ottimizzare l'interattività e ridurre i repaint superflui
 st.markdown("""
 <style>
 div.stCheckbox {
@@ -23,12 +23,16 @@ div.stCheckbox label p {
 </style>
 """, unsafe_allow_html=True)
 
-# Inizializzazione del Database Pazienti
-if "db_pazienti" not in st.session_state:
+# Inizializzazione centralizzata e ottimizzata del Database Pazienti con TTL
+@st.cache_data(ttl=60)
+def _carica_db_iniziale():
     from utils import carica_db_pazienti
-    st.session_state["db_pazienti"] = carica_db_pazienti()
+    return carica_db_pazienti()
 
-# Menu di navigazione laterale con brand 2gether e payoff corretto per sfondo scuro
+if "db_pazienti" not in st.session_state:
+    st.session_state["db_pazienti"] = _carica_db_iniziale()
+
+# Menu di navigazione laterale con brand 2gether
 st.sidebar.markdown(
     """
     <div style="padding-bottom: 20px;">
@@ -43,54 +47,37 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 
+# Mappatura pulita dei moduli per evitare catene if-elif ridondanti e pesanti
+MODULI_ORGANO = {
+    "🧬 Prostata": "prostata",
+    "💧 Vescica": "vescica",
+    "🫘 Rene": "rene",
+    "⚾ Testicolo": "testicolo",
+    "🫁 Polmone": "polmone",
+    "🌀 Colon": "colon",
+    "♀️ Utero": "utero",
+    "🌸 Ovaio": "ovaio",
+    "🎀 Seno": "seno",
+    "🔶 Fegato": "fegato",
+    "🍋 Pancreas": "pancreas"
+}
+
 scelta_modulo = st.sidebar.radio(
     "Seleziona Modulo Organo:",
-    [
-        "🧬 Prostata", 
-        "💧 Vescica", 
-        "🫘 Rene", 
-        "⚾ Testicolo", 
-        "🫁 Polmone", 
-        "🌀 Colon", 
-        "♀️ Utero", 
-        "🌸 Ovaio", 
-        "🎀 Seno", 
-        "🔶 Fegato", 
-        "🍋 Pancreas"
-    ]
+    list(MODULI_ORGANO.keys()),
+    key="nav_scelta_organo"
 )
 
-# Caricamento moduli d'organo direttamente dalla root principale
-if scelta_modulo == "🧬 Prostata":
-    import prostata
-    prostata.render_modulo()
-elif scelta_modulo == "💧 Vescica":
-    import vescica
-    vescica.render_modulo()
-elif scelta_modulo == "🫘 Rene":
-    import rene
-    rene.render_modulo()
-elif scelta_modulo == "⚾ Testicolo":
-    import testicolo
-    testicolo.render_modulo()
-elif scelta_modulo == "🫁 Polmone":
-    import polmone
-    polmone.render_modulo()
-elif scelta_modulo == "🌀 Colon":
-    import colon
-    colon.render_modulo()
-elif scelta_modulo == "♀️ Utero":
-    import utero
-    utero.render_modulo()
-elif scelta_modulo == "🌸 Ovaio":
-    import ovaio
-    ovaio.render_modulo()
-elif scelta_modulo == "🎀 Seno":
-    import seno
-    seno.render_modulo()
-elif scelta_modulo == "🔶 Fegato":
-    import fegato
-    fegato.render_modulo()
-elif scelta_modulo == "🍋 Pancreas":
-    import pancreas
-    pancreas.render_modulo()
+# Caricamento dinamico e sicuro del modulo selezionato tramite importlib
+import importlib
+
+nom_modulo = MODULI_ORGANO.get(scelta_modulo)
+if nom_modulo:
+    try:
+        modulo_caricato = importlib.import_module(nom_modulo)
+        if hasattr(modulo_caricato, "render_modulo"):
+            modulo_caricato.render_modulo()
+        else:
+            st.error(f"Il modulo '{nom_modulo}' non contiene la funzione 'render_modulo()'.")
+    except ImportError as e:
+        st.error(f"Impossibile caricare il modulo per l'organo selezionato ({nom_modulo}): {e}")
