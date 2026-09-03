@@ -11,6 +11,32 @@ def genera_codice_univoco_organo(nome, cognome, organo_lettera="P"):
     
     return f"{n[0].upper()}{c[1].upper()}{c[0].upper()}{n[1].upper()}-{''.join(random.choices(string.digits, k=6))}-{organo_lettera.upper()[:1]}"
 
+def stima_aspettativa_di_vita(eta, charlson_score, g8_score, ecog_str):
+    """
+    Calcola l'aspettativa di vita ponderando comorbilità (Charlson), 
+    stato geriatrico (G8) e performance fisica (ECOG).
+    """
+    bonus_fitness = 0
+    
+    if "0" in ecog_str or "1" in ecog_str:
+        bonus_fitness += 2
+        
+    if g8_score >= 14:
+        bonus_fitness += 2
+    elif g8_score >= 11:
+        bonus_fitness += 1
+
+    charlson_ponderato = max(0, charlson_score - bonus_fitness)
+    
+    aspettativa_maggiore_di_10 = True
+    
+    if eta >= 80 and charlson_ponderato >= 5:
+        aspettativa_maggiore_di_10 = False
+    elif charlson_ponderato >= 6 and g8_score < 11:
+        aspettativa_maggiore_di_10 = False
+
+    return aspettativa_maggiore_di_10, charlson_ponderato
+
 def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
     st.markdown("### 📋 Anagrafica & Identificazione")
     
@@ -146,7 +172,11 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
 
     bonus_eta_charlson = 4 if eta >= 80 else (3 if eta >= 70 else (2 if eta >= 60 else (1 if eta >= 50 else 0)))
     charlson_totale = base_charlson + bonus_eta_charlson
-    st.info(f"📈 **Charlson Comorbidity Index (Corretto per Età):** `{charlson_totale}` (Comorbilità: {base_charlson} + Età: {bonus_eta_charlson})")
+    
+    # Calcolo dell'aspettativa di vita ponderata
+    aspettativa_ok, charlson_ponderato = stima_aspettativa_di_vita(eta, charlson_totale, g8_score, ecog)
+    
+    st.info(f"📈 **Charlson Comorbidity Index (Corretto per Età):** `{charlson_totale}` (Ponderato su Fitness: `{charlson_ponderato}`)")
 
     st.markdown("---")
     st.markdown("### 💊 Allergie, Tabagismo & Funzionalità Renale")
@@ -220,6 +250,8 @@ def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
         "mmse_eseguito": esegue_mmse,
         "mmse_valore": valore_mmse.strip(),
         "charlson_score": charlson_totale,
+        "charlson_ponderato": charlson_ponderato,
+        "aspettativa_vita_maggiore_10_anni": aspettativa_ok,
         "ha_allergie": ha_allergie,
         "specifica_allergie": specifica_allergie.strip(),
         "tabagismo": tabagismo,
@@ -251,7 +283,7 @@ def formatta_anamnesi_per_pdf_unificata(paziente_info):
     if paziente_info.get('mmse_eseguito') and (mmse_val := paziente_info.get('mmse_valore')):
         righe.append(f"• MMSE: {mmse_val}")
         
-    righe.append(f"• Charlson Comorbidity Index (corretto): {paziente_info.get('charlson_score', 'N/D')}")
+    righe.append(f"• Charlson Comorbidity Index (corretto): {paziente_info.get('charlson_score', 'N/D')} (Ponderato su Fitness: {paziente_info.get('charlson_ponderato', 'N/D')})")
     
     if paziente_info.get('ha_allergie') and (spec_all := paziente_info.get('specifica_allergie')):
         righe.append(f"• Allergie Note: {spec_all}")
