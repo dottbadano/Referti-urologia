@@ -1,336 +1,237 @@
 from datetime import datetime
-import random
-import string
 import streamlit as st
 
-def genera_codice_univoco_organo(nome, cognome, organo_lettera="P"):
+def calcola_indice_charlson_dettagliato(combilist):
     """
-    Genera codice univoco: 1ª nome, 2ª cognome, 1ª cognome, 2ª nome + 6 numeri + 1ª lettera organo.
+    Calcola l'indice di comorbilità di Charlson pesato in base alle patologie selezionate.
     """
-    n = nome.strip()
-    c = cognome.strip()
-    if len(n) < 2 or len(c) < 2:
-        return ""
+    punteggio = 0
+    pesi = {
+        "Infarto miocardico acuto / Pregresso": 1,
+        "Scompenso cardiaco congestizio": 1,
+        "Vasculopatia periferica": 1,
+        "Malattia cerebrovascolare (ictus / TIA)": 1,
+        "Demenza": 1,
+        "Malattia polmonare cronica (BPCO)": 1,
+        "Connettivopatia / Malattia reumatologica": 1,
+        "Ulcera peptica": 1,
+        "Malattia epatica lieve": 1,
+        "Diabete mellito (senza danno d'organo)": 1,
+        "Emiplegia / Paraplegia": 2,
+        "Malattia renale moderata o severa": 2,
+        "Diabete mellito con danno d'organo": 2,
+        "Tumore solido localizzato": 2,
+        essa_leucemia_linfoma: 2, # Gestito dinamicamente se presente
+        "Malattia epatica moderata o severa": 3,
+        "Tumore solido metastatico": 6,
+        "AIDS / HIV conclamato": 6
+    }
     
-    l1_nom = n[0].upper()
-    l2_cog = c[1].upper()
-    l1_cog = c[0].upper()
-    l2_nom = n[1].upper()
-    
-    rand_num = "".join(random.choices(string.digits, k=6))
-    org = organo_lettera.upper()[:1]
-    
-    return f"{l1_nom}{l2_cog}{l1_cog}{l2_nom}-{rand_num}-{org}"
+    for patologia in combilist:
+        # Assegnazione peso dinamico o standard
+        if "Leucemia" in patologia or "Linfoma" in patologia:
+            punteggio += 2
+        else:
+            punteggio += pesi.get(patologia, 1)
+            
+    return punteggio
 
-def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="gen"):
+def calcola_screening_g8(eta, app_to_eat, perdita_peso, mobilita, neuropsichico, bmi_val):
     """
-    Modulo unificato con inclusione del Charlson Comorbidity Index corretto.
+    Calcola il punteggio G8 per lo screening geriatrico (range 0-17).
     """
-    st.markdown("### 📋 Anagrafica & Identificazione")
+    score = 0
     
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        nome = st.text_input("Nome Paziente", key=f"input_nome_{prefix}")
-    with col_b:
-        cognome = st.text_input("Cognome Paziente", key=f"input_cognome_{prefix}")
+    # 1. Riduzione dell'assunzione di cibo negli ultimi 3 mesi
+    score += app_to_eat
     
-    id_key = f"input_id_{prefix}"
-    if id_key not in st.session_state:
-        st.session_state[id_key] = ""
+    # 2. Perdita di peso recente (< 3 mesi)
+    score += perdita_peso
+    
+    # 3. Mobilità
+    score += mobilita
+    
+    # 4. Problemi neuropsicologici
+    score += neuropsichico
+    
+    # 5. Indice di Massa Corporea (BMI)
+    score += bmi_val
+    
+    # 6. Assunzione di più di 3 farmaci al giorno (valutato esternamente o di default)
+    # 7. Età del paziente
+    if eta < 80:
+        score += 3
+    elif 80 <= eta <= 85:
+        score += 2
+    else:
+        score += 1
         
-    nuovo_id = genera_codice_univoco_organo(nome, cognome, sigla_organo)
-    if nuovo_id:
-        st.session_state[id_key] = nuovo_id
+    return score
 
-    with col_c:
-        codice_paziente = st.text_input("Codice Univoco / ID (Autogenerato)", key=id_key)
-
-    col_d1, col_d2, col_d3 = st.columns(3)
-    with col_d1:
-        data_nascita = st.date_input("Data di Nascita", datetime(1960, 1, 1), key=f"input_nascita_{prefix}")
-    with col_d2:
-        peso = st.number_input("Peso (kg)", min_value=30.0, max_value=250.0, value=75.0, step=0.5, key=f"input_peso_{prefix}")
-    with col_d3:
-        altezza = st.number_input("Altezza (cm)", min_value=100.0, max_value=250.0, value=175.0, step=1.0, key=f"input_altezza_{prefix}")
-
-    # Calcolo automatico BMI e Età
-    altezza_m = altezza / 100.0
-    bmi_valore = round(peso / (altezza_m ** 2), 1) if altezza_m > 0 else 0.0
-    oggi = datetime.today().date()
-    eta = oggi.year - data_nascita.year - ((oggi.month, oggi.day) < (data_nascita.month, data_nascita.day))
+def render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="comune"):
+    """
+    Modulo unificato ottimizzato per Anagrafica, Anamnesi Patologica Remota, 
+    Comorbilità (Charlson) e Screening Oncogeriatrico (G8).
+     racchiuso in un'unica interfaccia pulita e strutturata.
+    """
+    st.subheader("Anagrafica e Identificazione Paziente")
     
-    st.info(f"📊 **Età Anagrafica:** {eta} anni | ⚖️ **BMI:** `{bmi_valore}`")
+    col_a1, col_a2, col_a3 = st.columns(3)
+    with col_a1:
+        cognome = st.text_input("Cognome", key=f"{prefix}_cognome")
+    with col_a2:
+        nome = st.text_input("Nome", key=f"{prefix}_nome")
+    with col_a3:
+        data_nascita = st.date_input(
+            "Data di Nascita", 
+            value=datetime(1955, 1, 1).date(), 
+            min_value=datetime(1900, 1, 1).date(),
+            max_value=datetime.today().date(),
+            key=f"{prefix}_datanascita"
+        )
+
+    col_a4, col_a5 = st.columns(2)
+    with col_a4:
+        codice_fiscale = st.text_input("Codice Fiscale / ID Univoco", key=f"{prefix}_codice").strip().upper()
+    with col_a5:
+        recapito_tel = st.text_input("Recapito Telefonico", key=f"{prefix}_tel")
 
     st.markdown("---")
-    st.markdown("### 🏃‍♂️ Performance Status")
-    ecog = st.selectbox(
-        "ECOG Performance Status:",
-        [
-            "0 - Pienamente attivo e autonomo",
-            "1 - Sintomatico ma ambulante",
-            "2 - Allettato <50% del giorno",
-            "3 - Allettato >50% del giorno",
-            "4 - Completamente allettato e dipendente"
-        ],
-        key=f"{prefix}_ecog"
+    st.subheader("Anamnesi Patologica Remota (APR) & Comorbilità")
+    
+    combilist_possibili = [
+        "Infarto miocardico acuto / Pregresso",
+        "Scompenso cardiaco congestizio",
+        "Vasculopatia periferica",
+        "Malattia cerebrovascolare (ictus / TIA)",
+        "Demenza",
+        "Malattia polmonare cronica (BPCO)",
+        "Connettivopatia / Malattia reumatologica",
+        "Ulcera peptica",
+        "Malattia epatica lieve",
+        "Diabete mellito (senza danno d'organo)",
+        "Emiplegia / Paraplegia",
+        "Malattia renale moderata o severa",
+        "Diabete mellito con danno d'organo",
+        "Tumore solido localizzato",
+        "Leucemia o Linfoma",
+        "Malattia epatica moderata o severa",
+        "Tumore solido metastatico",
+        "AIDS / HIV conclamato"
+    ]
+    
+    combilist_selezionate = st.multiselect(
+        "Seleziona patologie pregresse/concomitanti (per calcolo automatico Charlson Index):",
+        combilist_possibili,
+        key=f"{prefix}_combilist"
     )
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        adl = st.selectbox(
-            "Scala ADL (Activities of Daily Living):",
-            ["Non valutato", "Indipendente (6/6)", "Parzialmente dipendente (3-5/6)", "Fortemente dipendente (0-2/6)"],
-            key=f"{prefix}_adl"
-        )
-    with col_p2:
-        iadl = st.selectbox(
-            "Scala IADL (Instrumental Activities of Daily Living):",
-            ["Non valutato", "Indipendente (8/8)", "Parzialmente dipendente (4-7/8)", "Fortemente dipendente (0-3/8)"],
-            key=f"{prefix}_iadl"
-        )
+    
+    charlson_score = calcola_indice_charlson_dettagliato(combilist_selezionate)
+    
+    col_c1, col_c2 = st.columns(2)
+    with col_c1:
+        st.info(f"**Indice di Charlson Calcolato:** {charlson_score}")
+    with col_c2:
+        fumo = st.selectbox("Anamnesi Tabagica:", ["Non Fumatore", "Ex Fumatore", "Fumatore Attivo"], key=f"{prefix}_fumo")
 
     st.markdown("---")
-    st.markdown("### 🧠 Valutazione Geriatrica (G8, GDS, Mini-Mental)")
+    st.subheader("Screening Oncogeriatrico (G8 & Parametri Funzionali)")
     
-    with st.expander("Screening G8 (Valutazione a 8 voci)", expanded=False):
-        g8_1_opt = st.selectbox("1. Riduzione assunzione di cibo negli ultimi 3 mesi?", [("0 - Grave diminuzione", 0), ("1 - Moderata diminuzione", 1), ("2 - Nessuna diminuzione", 2)], format_func=lambda x: x[0], key=f"{prefix}_g8_1")[1]
-        g8_2_opt = st.selectbox("2. Perdita di peso recente:", [("0 - > 3 kg", 0), ("1 - Non sa", 1), ("2 - Tra 1 e 3 kg", 2), ("3 - Nessuna", 3)], format_func=lambda x: x[0], key=f"{prefix}_g8_2")[1]
-        g8_3_opt = st.selectbox("3. Mobilità:", [("0 - A letto/sedia", 0), ("1 - Esce ma limitato", 1), ("2 - Normale", 2)], format_func=lambda x: x[0], key=f"{prefix}_g8_3")[1]
-        g8_4_opt = st.selectbox("4. Malattia acuta o stress psicologico recente?", [("0 - Sì", 0), ("2 - No", 2)], format_func=lambda x: x[0], key=f"{prefix}_g8_4")[1]
-        g8_5_opt = st.selectbox("5. Problemi neuropsicologici:", [("0 - Demenza/Depressione grave", 0), ("1 - Demenza lieve", 1), ("2 - Nessuno", 2)], format_func=lambda x: x[0], key=f"{prefix}_g8_5")[1]
-        g8_6_opt = st.selectbox("6. BMI:", [("0 - < 19", 0), ("1 - 19-21", 1), ("2 - 21-23", 2), ("3 - > 23", 3)], format_func=lambda x: x[0], key=f"{prefix}_g8_6")[1]
-        g8_7_opt = st.selectbox("7. Assume più di 3 farmaci al giorno?", [("0 - Sì", 0), ("1 - No", 1)], format_func=lambda x: x[0], key=f"{prefix}_g8_7")[1]
-        g8_8_opt = st.selectbox("8. Stato di salute percepito rispetto ai coetanei:", [("0 - Peggiore", 0), ("0.5 - Non sa", 0.5), ("1 - Uguale", 1), ("2 - Migliore", 2)], format_func=lambda x: x[0], key=f"{prefix}_g8_8")[1]
-
-    g8_score = g8_1_opt + g8_2_opt + g8_3_opt + g8_4_opt + g8_5_opt + g8_6_opt + g8_7_opt + g8_8_opt
-    st.info(f"📌 **Punteggio Totale G8:** `{g8_score}/17`")
-
+    eta_corrente = (datetime.today().date() - data_nascita).days // 365
+    
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        gds = st.selectbox(
-            "Geriatric Depression Scale (GDS):",
-            ["Non valutato", "Negativa (Assente)", "Positiva (Sospetta depressione / lieve-moderata)"],
-            key=f"{prefix}_gds"
-        )
+        app_to_eat = st.selectbox(
+            "1. Riduzione assunzione cibo ultimi 3 mesi:",
+            [
+                (0, "Ha mangiato molto meno"),
+                (1, "Ha mangiato un po' meno"),
+                (2, "Ha mangiato normalmente")
+            ],
+            format_func=lambda x: x[1],
+            key=f"{prefix}_g8_1"
+        )[0]
+        
+        perdita_peso = st.selectbox(
+            "2. Perdita di peso recente (< 3 mesi):",
+            [
+                (0, "Perdita > 3 kg"),
+                (1, "Non sa"),
+                (2, "Perdita tra 1 e 3 kg"),
+                (3, "Nessuna perdita di peso")
+            ],
+            format_func=lambda x: x[1],
+            key=f"{prefix}_g8_2"
+        )[0]
+        
+        mobilita = st.selectbox(
+            "3. Mobilità:",
+            [
+                (0, "Costretto a letto o in poltrona"),
+                (1, "Capace di uscire ma non autosufficiente"),
+                (2, "Autosufficiente nei movimenti")
+            ],
+            format_func=lambda x: x[1],
+            key=f"{prefix}_g8_3"
+        )[0]
+
     with col_g2:
-        esegue_mmse = st.checkbox("Eseguito Mini-Mental State Examination (MMSE)", key=f"{prefix}_check_mmse")
-        valore_mmse = ""
-        if esegue_mmse:
-            valore_mmse = st.text_input("Punteggio MMSE (es. 28/30)", key=f"{prefix}_valore_mmse")
+        neuropsichico = st.selectbox(
+            "4. Problemi neuropsicologici:",
+            [
+                (0, "Demenza o depressione severa"),
+                (1, "Demenza o depressione lieve"),
+                (2, "Nessun problema psicologico")
+            ],
+            format_func=lambda x: x[1],
+            key=f"{prefix}_g8_4"
+        )[0]
+        
+        bmi_scelta = st.selectbox(
+            "5. Indice di Massa Corporea (BMI):",
+            [
+                (0, "BMI < 19"),
+                (1, "19 <= BMI < 21"),
+                (2, "21 <= BMI < 23"),
+                (3, "BMI >= 23")
+            ],
+            format_func=lambda x: x[1],
+            key=f"{prefix}_g8_5"
+        )[0]
 
-    st.markdown("---")
-    st.markdown("### 📊 Charlson Comorbidity Index (CCI)")
-    with st.expander("Seleziona comorbilità attive per calcolo Charlson", expanded=False):
-        c_infarto = st.checkbox("Infarto miocardico pregresso (+1)", key=f"{prefix}_c_infarto")
-        c_scompenso = st.checkbox("Scompenso cardiaco congestizio (+1)", key=f"{prefix}_c_scompenso")
-        c_vascolare = st.checkbox("Malattia vascolare periferica (+1)", key=f"{prefix}_c_vascolare")
-        c_cerebrovascolare = st.checkbox("Malattia cerebrovascolare / TIA (+1)", key=f"{prefix}_c_cerebrovascolare")
-        c_demenza = st.checkbox("Demenza (+1)", key=f"{prefix}_c_demenza")
-        c_bpco = st.checkbox("Malattia polmonare cronica (BPCO) (+1)", key=f"{prefix}_c_bpco")
-        c_connettivite = st.checkbox("Malattia del tessuto connettivo / Reumatologica (+1)", key=f"{prefix}_c_connettivite")
-        c_ulcera = st.checkbox("Ulcera peptica (+1)", key=f"{prefix}_c_ulcera")
-        c_fegato_l = st.checkbox("Malattia epatica lieve (+1)", key=f"{prefix}_c_fegato_l")
-        c_diabete = st.checkbox("Diabete mellito (+1)", key=f"{prefix}_c_diabete")
-        c_emiplegia = st.checkbox("Emiplegia o paraplegia (+2)", key=f"{prefix}_c_emiplegia")
-        c_renale = st.checkbox("Malattia renale cronica moderata-severa (+2)", key=f"{prefix}_c_renale")
-        c_tumore = st.checkbox("Tumore solido localizzato (+2)", key=f"{prefix}_c_tumore")
-        c_leucemia = st.checkbox("Leucemia o Linfoma (+2)", key=f"{prefix}_c_leucemia")
-        c_fegato_g = st.checkbox("Malattia epatica moderata-severa (+3)", key=f"{prefix}_c_fegato_g")
-        c_metastasi = st.checkbox("Tumore solido metastatico / Malattia disseminata (+6)", key=f"{prefix}_c_metastasi")
-        c_aids = st.checkbox("AIDS / HIV conclamato (+6)", key=f"{prefix}_c_aids")
-
-    base_charlson = 0
-    if c_infarto: base_charlson += 1
-    if c_scompenso: base_charlson += 1
-    if c_vascolare: base_charlson += 1
-    if c_cerebrovascolare: base_charlson += 1
-    if c_demenza: base_charlson += 1
-    if c_bpco: base_charlson += 1
-    if c_connettivite: base_charlson += 1
-    if c_ulcera: base_charlson += 1
-    if c_fegato_l: base_charlson += 1
-    if c_diabete: base_charlson += 1
-    if c_emiplegia: base_charlson += 2
-    if c_renale: base_charlson += 2
-    if c_tumore: base_charlson += 2
-    if c_leucemia: base_charlson += 2
-    if c_fegato_g: base_charlson += 3
-    if c_metastasi: base_charlson += 6
-    if c_aids: base_charlson += 6
-
-    bonus_eta_charlson = 0
-    if 50 <= eta < 60: bonus_eta_charlson = 1
-    elif 60 <= eta < 70: bonus_eta_charlson = 2
-    elif 70 <= eta < 80: bonus_eta_charlson = 3
-    elif eta >= 80: bonus_eta_charlson = 4
-
-    charlson_totale = base_charlson + bonus_eta_charlson
-    st.info(f"📈 **Charlson Comorbidity Index (Corretto per Età):** `{charlson_totale}` (Comorbilità: {base_charlson} + Età: {bonus_eta_charlson})")
-
-    st.markdown("---")
-    st.markdown("### 💊 Allergie, Tabagismo & Funzionalità Renale")
-    ha_allergie = st.checkbox("Il paziente presenta allergie note", key=f"{prefix}_ha_allergie")
-    specifica_allergie = ""
-    if ha_allergie:
-        specifica_allergie = st.text_input("Specificare allergie (es. farmaci, lattice, mdc)", key=f"{prefix}_specifica_allergie")
-
-    col_t1, col_t2 = st.columns(2)
-    with col_t1:
-        tabagismo = st.selectbox(
-            "Tabagismo:",
-            ["Non fumatore", "Ex fumatore", "Fumatore attivo"],
-            key=f"{prefix}_tabagismo"
-        )
-        sig_die = 0
-        if tabagismo == "Fumatore attivo":
-            sig_die = st.number_input("Numero sigarette / die", min_value=1, max_value=100, value=10, step=1, key=f"{prefix}_sig_die")
-
-    with col_t2:
-        col_r1, col_r2 = st.columns(2)
-        with col_r1:
-            creatinina = st.number_input("Creatinina (mg/dL)", min_value=0.2, max_value=15.0, value=0.9, step=0.1, key=f"{prefix}_creatinina")
-        with col_r2:
-            egfr = st.number_input("eGFR (mL/min)", min_value=5, max_value=150, value=90, step=1, key=f"{prefix}_egfr")
-
-    st.markdown("---")
-    st.markdown("### 🤝 Caregiver & Rete di Supporto")
-    caregiver_supporto = st.selectbox(
-        "Rete di supporto e Caregiver:",
-        ["Non valutato", "Autonomo (Senza caregiver)", "Caregiver familiare presente", "Caregiver strutturato / Assistenza domiciliare", "Supporto sociosanitario carente"],
-        key=f"{prefix}_caregiver"
-    )
-
-    st.markdown("### 🧬 Anamnesi Oncologica & Genetica")
-    st.write("Familiarità oncologica per organi:")
-    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-    with col_f1:
-        f_pros = st.checkbox("Prostata", key=f"{prefix}_f_pros")
-        f_seno = st.checkbox("Seno", key=f"{prefix}_f_seno")
-    with col_f2:
-        f_panc = st.checkbox("Pancreas", key=f"{prefix}_f_panc")
-        f_feg = st.checkbox("Fegato", key=f"{prefix}_f_feg")
-    with col_f3:
-        f_uter = st.checkbox("Utero / Endometrio", key=f"{prefix}_f_uter")
-        f_test = st.checkbox("Testicolo", key=f"{prefix}_f_test")
-    with col_f4:
-        f_polm = st.checkbox("Polmone", key=f"{prefix}_f_polm")
-        f_colo = st.checkbox("Colon-Retto", key=f"{prefix}_f_colo")
-
-    st.write("Profilo Genetico / Mutazionale:")
-    col_m1, col_m2, col_m3 = st.columns(3)
-    with col_m1:
-        f_hrd = st.checkbox("HRD (Homologous Recombination Deficiency)", key=f"{prefix}_f_hrd")
-    with col_m2:
-        f_brca = st.checkbox("BRCA Mutation (1/2)", key=f"{prefix}_f_brca")
-    with col_m3:
-        f_lynch = st.checkbox("Sindrome di Lynch / MSI", key=f"{prefix}_f_lynch")
-
-    st.markdown("---")
-    st.markdown("### 📝 Anamnesi Chirurgica & Farmacologica")
-    interventi = st.text_area("Anamnesi Chirurgica", key=f"{prefix}_interventi")
-    farmacologica = st.text_area("Anamnesi Farmacologica", key=f"{prefix}_farmacologica")
-
-    famiglie_attive = []
-    if f_pros: famiglie_attive.append("Prostata")
-    if f_seno: famiglie_attive.append("Seno")
-    if f_panc: famiglie_attive.append("Pancreas")
-    if f_feg: famiglie_attive.append("Fegato")
-    if f_uter: famiglie_attive.append("Utero/Endometrio")
-    if f_test: famiglie_attive.append("Testicolo")
-    if f_polm: famiglie_attive.append("Polmone")
-    if f_colo: famiglie_attive.append("Colon-Retto")
-
-    genetica_attiva = []
-    if f_hrd: genetica_attiva.append("HRD Positivo")
-    if f_brca: genetica_attiva.append("BRCA Mutated")
-    if f_lynch: genetica_attiva.append("Sindrome di Lynch / MSI")
+    totale_g8 = calcola_screening_g8(eta_corrente, app_to_eat, perdita_peso, mobilita, neuropsichico, bmi_scelta)
+    
+    st.markdown(f"### Punteggio G8 Totale: **{totale_g8} / 17**")
+    if totale_g8 <= 14:
+        st.warning("Screening G8 ≤ 14: Paziente a rischio geriatrico. Si raccomanda valutazione multidimensionale approfondita.")
+    else:
+        st.success("Screening G8 > 14: Profilo geriatrico favorevole.")
 
     return {
-        "nome": nome.strip(),
-        "cognome": cognome.strip(),
-        "id_univoco": codice_paziente.strip(),
+        "nome": nome,
+        "cognome": cognome,
         "data_nascita": str(data_nascita),
-        "eta": eta,
-        "peso": peso,
-        "altezza": altezza,
-        "bmi": bmi_valore,
-        "ecog": ecog,
-        "adl": adl,
-        "iadl": iadl,
-        "g8_score": g8_score,
-        "gds": gds,
-        "mmse_eseguito": esegue_mmse,
-        "mmse_valore": valore_mmse.strip(),
-        "charlson_score": charlson_totale,
-        "ha_allergie": ha_allergie,
-        "specifica_allergie": specifica_allergie.strip(),
-        "tabagismo": tabagismo,
-        "sig_die": sig_die,
-        "creatinina": creatinina,
-        "egfr": egfr,
-        "caregiver": caregiver_supporto,
-        "familiarita": famiglie_attive,
-        "genetica": genetica_attiva,
-        "interventi": interventi.strip(),
-        "farmacologica": farmacologica.strip()
+        "id_univoco": codice_fiscale if codice_fiscale else f"{cognome.upper()}_{data_nascita.strftime('%Y%m%d')}",
+        "telefono": recapito_tel,
+        "charlson_score": charlson_score,
+        "combilist": combilist_selezionate,
+        "fumo": fumo,
+        "g8_score": totale_g8
     }
 
 def formatta_anamnesi_per_pdf_unificata(paziente_info):
     """
-    Formatta l'anamnesi in modo pulito ed esclusivo dei campi compilati/positivi per il PDF.
+    Formatta l'anamnesi e i punteggi geriatrico-comorbidi in stringhe pulite pronte per la generazione del PDF.
     """
-    righe = []
+    comb_str = ", ".join(paziente_info.get("combilist", [])) if paziente_info.get("combilist") else "Nessuna comorbilità maggiore segnalata"
     
-    # Dati antropometrici e performance
-    righe.append(f"• Età: {paziente_info.get('eta', 'N/D')} anni | Peso: {paziente_info.get('peso', 'N/D')} kg | Altezza: {paziente_info.get('altezza', 'N/D')} cm | BMI: {paziente_info.get('bmi', 'N/D')}")
-    righe.append(f"• Performance Status (ECOG): {paziente_info.get('ecog', 'N/D')}")
-    
-    if paziente_info.get('adl') and paziente_info.get('adl') != "Non valutato":
-        righe.append(f"• ADL: {paziente_info.get('adl')}")
-    if paziente_info.get('iadl') and paziente_info.get('iadl') != "Non valutato":
-        righe.append(f"• IADL: {paziente_info.get('iadl')}")
-        
-    # Valutazione geriatrica
-    righe.append(f"• Screening G8: {paziente_info.get('g8_score', 'N/D')}/17")
-    if paziente_info.get('gds') and paziente_info.get('gds') != "Non valutato":
-        righe.append(f"• GDS: {paziente_info.get('gds')}")
-    if paziente_info.get('mmse_eseguito') and paziente_info.get('mmse_valore'):
-        righe.append(f"• MMSE: {paziente_info.get('mmse_valore')}")
-        
-    # Comorbilità e indici
-    righe.append(f"• Charlson Comorbidity Index (corretto): {paziente_info.get('charlson_score', 'N/D')}")
-    
-    # Allergie e stili di vita
-    if paziente_info.get('ha_allergie') and paziente_info.get('specifica_allergie'):
-        righe.append(f"• Allergie Note: {paziente_info.get('specifica_allergie')}")
-    else:
-        righe.append("• Allergie: Nessuna nota/riferita")
-        
-    tabagismo_str = paziente_info.get('tabagismo', 'Non fumatore')
-    if tabagismo_str == "Fumatore attivo":
-        tabagismo_str += f" ({paziente_info.get('sig_die', 0)} sigarette/die)"
-    righe.append(f"• Tabagismo: {tabagismo_str}")
-    
-    righe.append(f"• Funzionalità Renale: Creatinina {paziente_info.get('creatinina', 'N/D')} mg/dL | eGFR {paziente_info.get('egfr', 'N/D')} mL/min")
-    
-    if paziente_info.get('caregiver') and paziente_info.get('caregiver') != "Non valutato":
-        righe.append(f"• Rete di Supporto / Caregiver: {paziente_info.get('caregiver')}")
-        
-    # Familiarità e Genetica
-    fam = paziente_info.get('familiarita', [])
-    if fam:
-        righe.append(f"• Familiarità Oncologica: {', '.join(fam)}")
-        
-    gen = paziente_info.get('genetica', [])
-    if gen:
-        righe.append(f"• Profilo Genetico / Mutazionale: {', '.join(gen)}")
-        
-    # Chirurgica e Farmacologica
-    interventi = paziente_info.get('interventi', '')
-    if interventi:
-        righe.append(f"• Anamnesi Chirurgica: {interventi}")
-        
-    farmacologica = paziente_info.get('farmacologica', '')
-    if farmacologica:
-        righe.append(f"• Terapia Farmacologica Attuale: {farmacologica}")
-        
-    return "\n".join(righe)
+    testo = (
+        f"Anagrafica: {paziente_info.get('cognome', '')} {paziente_info.get('nome', '')} "
+        f"(Nato il: {paziente_info.get('data_nascita', '')}) - ID: {paziente_info.get('id_univoco', '')}\n"
+        f"Recapito: {paziente_info.get('telefono', 'Non specificato')}\n"
+        f"Anamnesi Patologica Remota & Comorbilità: {comb_str}\n"
+        f"Indice di Comorbilità di Charlson: {paziente_info.get('charlson_score', 0)}\n"
+        f"Anamnesi Tabagica: {paziente_info.get('fumo', 'Non specificato')}\n"
+        f"Screening Oncogeriatrico G8: {paziente_info.get('g8_score', 0)} / 17"
+    )
+    return testo
