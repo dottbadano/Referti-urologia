@@ -396,7 +396,7 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
             st.session_state["ultimo_paziente_fu_tm"] = codice_search
             st.success("✅ Controllo terapia medica salvato con successo!")
 
-    if st.session_state.get("ultimo_paziente_fu_tm"] == codice_search and paziente["visite"]:
+    if st.session_state.get("ultimo_paziente_fu_tm") == codice_search and paziente["visite"]:
         ultima_visita = paziente["visite"][-1]
         note_pdf_tm = [f"Schema: {tipo_trattamento_ormonale}", tolleranza_effetti]
         note_pdf_tm = [n for n in note_pdf_tm if n]
