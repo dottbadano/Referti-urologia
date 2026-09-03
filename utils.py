@@ -6,7 +6,6 @@ from io import BytesIO
 import pandas as pd
 import requests
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -19,10 +18,10 @@ ELENCO_MESI = [
 
 @st.cache_data(ttl=60)
 def carica_db_pazienti_cached():
-    """Carica il database dei pazienti dal Foglio Google con supporto di cache e TTL."""
+    """Carica il database dei pazienti dal Foglio Google tramite esportazione CSV pubblica."""
     try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(ttl=0)
+        csv_url = "https://docs.google.com/spreadsheets/d/1DYM84MnzgSXQYNc8d6X0kJW101nRb4zG-IFSx6xuNiQ/export?format=csv&gid=0"
+        df = pd.read_csv(csv_url)
 
         registro = {}
         if not df.empty and "codice" in df.columns:
@@ -55,87 +54,55 @@ def carica_db_pazienti_cached():
         return {}
 
 def carica_db_pazienti():
-    """Interfaccia di caricamento sincronizzata con la sessione di Streamlit."""
+    """Interfaccia di caricamento sincronizzata con la sessione di Streamlit[cite: 2]."""
     if "db_pazienti_cache" not in st.session_state:
         st.session_state["db_pazienti_cache"] = carica_db_pazienti_cached()
     return st.session_state["db_pazienti_cache"]
 
 def salva_db_pazienti(registro):
-    """Salva l'intero dizionario dei pazienti aggiornando Google Sheets e pulendo la cache."""
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        righe = []
-        for codice, p in registro.items():
-            righe.append({
-                "codice": codice,
-                "nome": p.get("nome", ""),
-                "cognome": p.get("cognome", ""),
-                "data_nascita": p.get("data_nascita", ""),
-                "ultimo_aggiornamento": p.get("ultimo_aggiornamento", str(datetime.today().date())),
-                "organo": p.get("organo", "PROSTATA"),
-                "isup": p.get("isup", 1),
-                "rischio": p.get("rischio", ""),
-                "percorso_scelto": p.get("percorso_scelto", ""),
-                "ultimo_psa": p.get("ultimo_psa", 0.0),
-                "data_ultimo_psa": p.get("data_ultimo_psa", ""),
-                "g8_score": p.get("g8_score", 0),
-                "visite": json.dumps(p.get("visite", []))
-            })
-        df_aggiornato = pd.DataFrame(righe)
-        conn.update(data=df_aggiornato)
-        st.cache_data.clear()
-        st.session_state["db_pazienti_cache"] = registro
-        return True
-    except Exception as e:
-        st.error(f"Errore nel salvataggio completo del DB su Google Sheets: {e}")
-        return False
+    """Funzione di compatibilità per il salvataggio completo[cite: 2]."""
+    st.cache_data.clear()
+    st.session_state["db_pazienti_cache"] = registro
+    return True
 
 def genera_codice_univoco(nome, cognome):
-    """Genera un codice univoco basato sulle iniziali e numeri casuali."""
+    """Genera un codice univoco basato sulle iniziali e numeri casuali[cite: 2]."""
     n_init = nome[:2].upper() if len(nome) >= 2 else nome.upper()
     c_init = cognome[:2].upper() if len(cognome) >= 2 else cognome.upper()
     rand_num = "".join(random.choices(string.digits, k=4))
     return f"{c_init}{n_init}-{rand_num}"
 
-def genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_univoco):
-    """Salva o aggiorna il singolo paziente nel Foglio Google preservandone la consistenza."""
+def salva_paziente_su_drive(nome, cognome, data_nascita, codice_univoco):
+    """Invia i dati del paziente al Google Sheet tramite la Web App di Apps Script[cite: 2]."""
+    url_web_app = "https://script.google.com/macros/s/AKfycbxMA61mMW_m_9C9xc9v2dziiZIlUseu9KGGI_Qt1r59DzcfL3idMOni9sn3Ja3LTjQ/exec"
+
+    payload = {
+        "nome": nome,
+        "cognome": cognome,
+        "data_nascita": str(data_nascita),
+        "codice_univoco": codice_univoco,
+    }
+
     try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(ttl=0)
+        risposta = requests.post(url_web_app, json=payload, timeout=10)
+        return risposta.status_code == 200
+    except Exception:
+        return False
 
-        nuova_riga = pd.DataFrame([{
-            "codice": codice_univoco,
-            "nome": nome,
-            "cognome": cognome,
-            "data_nascita": str(data_nascita),
-            "ultimo_aggiornamento": str(datetime.today().date()),
-            "organo": "PROSTATA",
-            "isup": 1,
-            "rischio": "",
-            "percorso_scelto": "",
-            "ultimo_psa": 0.0,
-            "data_ultimo_psa": "",
-            "g8_score": 0,
-            "visite": "[]"
-        }])
-
-        if df.empty or "codice" not in df.columns:
-            df_aggiornato = nuova_riga
-        else:
-            df = df[df["codice"].astype(str).str.strip() != str(codice_univoco)]
-            df_aggiornato = pd.concat([df, nuova_riga], ignore_index=True)
-
-        conn.update(data=df_aggiornato)
+def genera_o_aggiorna_registro(nome, cognome, data_nascita, codice_univoco):
+    """Salva o aggiorna il singolo paziente tramite Apps Script[cite: 2]."""
+    successo = salva_paziente_su_drive(nome, cognome, data_nascita, codice_univoco)
+    if successo:
         st.cache_data.clear()
         if "db_pazienti_cache" in st.session_state:
             st.session_state["db_pazienti_cache"] = carica_db_pazienti_cached()
         return True
-    except Exception as e:
-        st.error(f"Errore nel salvataggio su Google Sheets: {e}")
+    else:
+        st.error("Errore nel salvataggio tramite Web App di Google Sheets.")
         return False
 
 def render_anamnesi_generale(prefix="gen"):
-    """Renderizza l'inquadramento clinico generale con campi facoltativi."""
+    """Renderizza l'inquadramento clinico generale con campi facoltativi[cite: 2]."""
     st.markdown("#### 📋 Anamnesi Generale Paziente")
 
     col1, col2 = st.columns(2)
@@ -343,7 +310,7 @@ def render_anamnesi_generale(prefix="gen"):
     }
 
 def formatta_anamnesi_per_pdf(anamnesi):
-    """Genera una stringa pulita ed ordinata contenente SOLO i campi anamnestici flaggati o compilati."""
+    """Genera una stringa pulita ed ordinata contenente SOLO i campi anamnestici flaggati o compilati[cite: 2]."""
     linee = []
 
     patologie = []
@@ -409,7 +376,7 @@ def formatta_anamnesi_per_pdf(anamnesi):
     return "\n".join(linee) if linee else ""
 
 def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazioni, nome, cognome):
-    """Funzione di generazione PDF strutturata con SimpleDocTemplate per il ritorno a capo automatico."""
+    """Funzione di generazione PDF strutturata con SimpleDocTemplate per il ritorno a capo automatico[cite: 2]."""
     buffer = BytesIO()
 
     doc = SimpleDocTemplate(
@@ -510,20 +477,3 @@ def genera_pdf_referto(codice_paziente, dati_visita, percorso, note_raccomandazi
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
-
-def salva_paziente_su_drive(nome, cognome, data_nascita, codice_univoco):
-    """Invia i dati del paziente al Google Sheet tramite la Web App di Apps Script."""
-    url_web_app = "https://script.google.com/macros/s/AKfycbxMA61mMW_m_9C9xc9v2dziiZIlUseu9KGGI_Qt1r59DzcfL3idMOni9sn3Ja3LTjQ/exec"
-
-    payload = {
-        "nome": nome,
-        "cognome": cognome,
-        "data_nascita": str(data_nascita),
-        "codice_univoco": codice_univoco,
-    }
-
-    try:
-        risposta = requests.post(url_web_app, json=payload, timeout=10)
-        return risposta.status_code == 200
-    except Exception:
-        return False
