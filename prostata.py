@@ -13,22 +13,20 @@ from anamnesi_comune import (
     render_anagrafica_e_anamnesi_unificata,
     formatta_anamnesi_per_pdf_unificata
 )
+from terapia_medica import render_terapia_medica
 
 # Funzioni di fallback integrate per evitare errori di importazione mancanti
 def render_followup_sorveglianza_avanzato(paziente, db_attivo, codice_search):
-    st.info("Modulo Sorveglianza Attiva in fase di caricamento (Fallback integrato).")
+    st.info("Modulo Sorveglianza Attiva in fase di caricamento (Fallback integrato).[cite: 2]")
 
 def render_followup_chirurgia_avanzato(paziente, db_attivo, codice_search):
-    st.info("Modulo Chirurgia (Post-Prostatectomia) in fase di caricamento (Fallback integrato).")
+    st.info("Modulo Chirurgia (Post-Prostatectomia) in fase di caricamento (Fallback integrato).[cite: 2]")
 
 def render_followup_radioterapia_avanzato(paziente, db_attivo, codice_search):
-    st.info("Modulo Radioterapia in fase di caricamento (Fallback integrato).")
-
-def render_terapia_medica(paziente, db_attivo, codice_search):
-    st.info("Modulo Terapia Medica / Ormonale in fase di caricamento (Fallback integrato).")
+    st.info("Modulo Radioterapia in fase di caricamento (Fallback integrato).[cite: 2]")
 
 def genera_testo_patologia(gruppo_rischio, scelta_trattamento):
-    testo_scelta = "Trattamento chirurgico di Prostatectomia Radicale" if scelta_trattamento == "Chirurgia (Post-Prostatectomia)" else scelta_trattamento
+    testo_scelta = "Trattamento chirurgico di Prostatectomia Radicale" if scelta_trattamento == "Chirurgia (Post-Prostatectomia)" else scelta_trattamento[cite: 2]
     
     if gruppo_rischio == "Basso Rischio":
         base = (
