@@ -3,7 +3,6 @@ import math
 import sys
 import os
 
-# Configurazione del path per includere la cartella moduli_trattamenti ed evitare errori di importazione
 current_dir = os.path.dirname(os.path.abspath(__file__))
 moduli_path = os.path.join(current_dir, "moduli_trattamenti")
 if moduli_path not in sys.path:
@@ -23,8 +22,6 @@ from anamnesi_comune import (
     formatta_anamnesi_per_pdf_unificata
 )
 
-# Tentativo di importazione dei moduli avanzati da 'moduli_trattamenti/terapia_medica.py' o file dedicati,
-# con fallback integrati nel caso in cui i file specifici non siano ancora implementati.
 try:
     from terapia_medica import render_terapia_medica
 except ImportError:
@@ -447,7 +444,7 @@ def render_modulo():
             st.warning("Inserisci il codice univoco del paziente per accedere al follow-up personalizzato.")
         else:
             if codice_search in db_attivo:
-                paziente = db_attivo[codice_search]
+                paziente = db_att_attivo = db_attivo[codice_search]
                 percorso_attuale = paziente.get("percorso_scelto", "Sorveglianza Attiva")
                 
                 st.success(f"Paziente Trovato: {paziente.get('cognome', '')} {paziente.get('nome', '')} (ID: {codice_search})")
