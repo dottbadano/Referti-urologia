@@ -3,9 +3,9 @@ import streamlit as st
 from utils import genera_pdf_referto, salva_db_pazienti
 
 def render_terapia_medica(paziente, db_attivo, codice_search):
-    """Modulo dedicato alla gestione e follow-up della Terapia Medica (ormonale, ARSI, chemioterapia, PARPi, mCRPC e Bone Health)."""
-    st.markdown("### 🟡 Protocollo di Terapia Medica Avanzata")
-    st.info("Gestione della malattia metastatica o avanzata, definizione del volume tumorale (Criteri CHAARTED/STAMPEDE), transizione mCRPC, terapie sistemiche, mutazioni HRR/BRCA, salute ossea e monitoraggio di PSA e testosteronemia.")
+    """Modulo dedicato alla gestione e follow-up della Terapia Medica (ormonale, ARSI, chemioterapia, PARPi, mCRPC e Bone Health) con supporto decisionale basato su stadiazione TNM, carico lesionale e comorbilità."""
+    st.markdown("### 🟡 Protocollo di Terapia Medica Avanzata & Supporto Decisionale")
+    st.info("Gestione della malattia avanzata, stratificazione del volume tumorale (Criteri CHAARTED/STAMPEDE da cTNM e lesioni ossee), analisi guidata delle comorbilità per la scelta dell'ARSI e prevenzione SRE.")
     
     # Visualizzazione dello Storico
     with st.expander("📂 Visualizza Storico Visite e Controlli Terapia Medica Precedenti", expanded=False):
@@ -21,16 +21,66 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
     st.markdown("### 🔄 Nuova Valutazione / Controllo Terapia Medica")
 
     with st.form(key="form_terapia_medica_aggiornato"):
-        st.markdown("#### 🌍 Caratteristiche di Malattia e Volume (Criteri CHAARTED / STAMPEDE)")
+        st.markdown("#### 🌍 Caratteristiche di Stadiazione (cTNM) e Carico Lesionale")
         
-        col_vol1, col_vol2 = st.columns(2)
-        with col_vol1:
-            presenza_metastasi = st.selectbox("Presenza di Metastasi", ["No (M0 / Ormonodipendente non metastatica)", "Sì (M1 / Malattia metastatica)"], key="tm_metastasi_check")
-        with col_vol2:
-            volume_malattia = st.selectbox("Volume di Malattia (Criteri CHAARTED/STAMPEDE)", ["Non applicabile (M0)", "Low Volume (Basso volume)", "High Volume (Alto volume: metastasi viscerali o >=4 lesioni ossee con almeno una extra-assiale/vertebrale)"], key="tm_volume")
+        col_tnm1, col_tnm2, col_tnm3 = st.columns(3)
+        with col_tnm1:
+            stad_t = st.selectbox("Stadio Clinico T", ["T1", "T2", "T3", "T4"], key="tm_stadio_t")
+        with col_tnm2:
+            stad_n = st.selectbox("Stadio Linfonodale N", ["N0", "N1"], key="tm_stadio_n")
+        with col_tnm3:
+            stad_m = st.selectbox("Stadio Metastatico M", ["M0 (Non metastatica)", "M1a (Linfonodi non regionali)", "M1b (Ossa)", "M1c (Viscerali o altro)"], key="tm_stadio_m")
+
+        col_les1, col_les2 = st.columns(2)
+        with col_les1:
+            num_lesioni_osseec = st.number_input("Numero di Lesioni Ossee stimate", min_value=0, max_value=50, value=0, step=1, key="tm_num_lesioni")
+        with col_les2:
+            # Calcolo automatico orientativo del volume CHAARTED/STAMPEDE
+            is_high_volume = ("M1c" in stad_m) or (num_lesioni_osseec >= 4)
+            volume_stimato = "High Volume (Alto volume)" if is_high_volume else ("Low Volume (Basso volume)" if "M1" in stad_m else "Non applicabile (M0)")
+            st.text_input("Volume di Malattia Stimato (CHAARTED/STAMPEDE)", value=volume_stimato, disabled=True, key="tm_vol_stimato")
 
         st.markdown("---")
-        st.markdown("#### 🚨 Stato di Malattia e transizione mCRPC (Resistenza alla Castrazione - Linee Guida EAU/ESMO)")
+        st.markdown("#### 🩺 Profilo di Comorbilità e Parametri Metabolico-Ossei")
+        
+        col_com1, col_com2, col_com3 = st.columns(3)
+        with col_com1:
+            flag_ipertensione = st.checkbox("Ipertensione severa / Scompenso CV", key="tm_flag_cv")
+            flag_diabete = st.checkbox("Diabete / Difficoltà con Cortisonici", key="tm_flag_diabete")
+        with col_com2:
+            flag_neurologico = st.checkbox("Patologie Neurologiche / Epilessia / Rischio Cadute", key="tm_flag_neuro")
+            flag_fragile = st.checkbox("Paziente Fragile / Politrattato", key="tm_flag_fragile")
+        with col_com3:
+            flag_osteopenia = st.checkbox("Osteopenia / Osteoporosi (Indicazione Bone Health)", key="tm_flag_osteopenia")
+
+        # Motore di Supporto Decisionale basato sui flag e sulle evidenze scientifiche
+        with st.expander("💡 Consiglio Clinico Basato su Evidenze (Trial Clinici & Tollerabilità)", expanded=True):
+            sconsiglia_abi = flag_ipertensione or flag_diabete
+            sconsiglia_enza = flag_neurologico or flag_fragile
+            
+            if "M1" in stad_m:
+                if is_high_volume:
+                    st.markdown("📍 **Setting: Malattia Metastatica ad Alto Volume (mHSPC)**")
+                    st.markdown("• *Studio ARASENS*: Considerare la **Tripletta** (ADT + Docetaxel + **Darolutamide**), che garantisce il massimo vantaggio di OS con un ottimo profilo di tollerabilità.")
+                else:
+                    st.markdown("📍 **Setting: Malattia Metastatica a Basso Volume (mHSPC)**")
+                    st.markdown("• *Studio TITAN / ARASENS / SPARTAN logic*: Preferire la **Doppietta** con un ARSI moderno evitando la chemio iniziale.")
+                
+                if sconsiglia_abi:
+                    st.warning("⚠️ **Nota Abiraterone**: Sconsigliato per la necessaria co-somministrazione di prednisone/prednisolone in pazienti con ipertensione o diabete.")
+                if sconsiglia_enza:
+                    st.warning("⚠️ **Nota Enzalutamide**: Richiede cautela per la penetrazione a livello del SNC in pazienti con fragilità o storia neurologica.")
+                if not sconsiglia_abi and not sconsiglia_enza:
+                    st.success("✅ **Opzioni valide**: Darolutamide, Apalutamide, Enzalutamide o Abiraterone valutabili in base alle preferenze prescrittive.")
+            else:
+                st.markdown("📍 **Setting: Malattia Non Metastatica (nmCRPC / M0)**")
+                st.markdown("• *Studio SPARTAN*: Valutare Apalutamide o molecole affini per ritardare la comparsa di metastasi.")
+
+            if flag_osteopenia:
+                st.info("🦴 **Protezione Ossea Consigliata**: Valutare l'avvio di Denosumab o Acido Zoledronico con supplementazione di Vitamina D/Calcemia per prevenire SRE.")
+
+        st.markdown("---")
+        st.markdown("#### 🚨 Stato di Malattia e transizione mCRPC (Linee Guida EAU/ESMO)")
         
         col_crpc1, col_crpc2 = st.columns(2)
         with col_crpc1:
@@ -44,14 +94,14 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
             if "Sì (mCRPC" in stato_crpc:
                 opzione_mcrpc = st.selectbox(
                     "Strategia di Linea Successiva (mCRPC)",
-                    ["Switch di ARSI", "Chemioterapia con Cabazitaxel", "Terapia Radiometabolica (177Lu-PSMA)", "Radio-223 (per metastasi ossee esclusive)"],
+                    ["Switch di ARSI", "Chemioterapia con Cabazitaxel", "Terapia Radiometabolica (177Lu-PSMA)", "Radio-223 (per metastasi ossee esclusive - Studio PEACE-3)"],
                     key="tm_strat_mcrpc"
                 )
             else:
                 st.info("Paziente in fase ormonosensibile.")
 
         st.markdown("---")
-        st.markdown("#### 💉 Terapia Ormonale e ARSI")
+        st.markdown("#### 💉 Terapia Ormonale e Scelta ARSI Guidata")
         
         col_LHRH1, col_LHRH2, col_LHRH3 = st.columns(3)
         with col_LHRH1:
@@ -65,14 +115,14 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
         with col_arsi1:
             usa_arsi_tm = st.selectbox("Associazione con ARSI?", ["No", "Sì"], key="tm_arsi_check")
         with col_arsi2:
-            tipo_arsi_tm = st.selectbox("Molecola ARSI", ["Nessuna", "Apalutamide", "Darolutamide", "Enzalutamide", "Abiraterone"], key="tm_tipo_arsi")
+            tipo_arsi_tm = st.selectbox("Molecola ARSI scelta", ["Nessuna", "Darolutamide", "Apalutamide", "Enzalutamide", "Abiraterone"], key="tm_tipo_arsi")
 
         st.markdown("---")
         st.markdown("#### 💊 Chemioterapia, Target Therapy (PARPi) e Salute Ossea")
         
         col_chem1, col_chem2 = st.columns(2)
         with col_chem1:
-            usa_chemio = st.selectbox("Chemioterapia associata?", ["No", "Sì"], key="tm_chemio_check")
+            usa_chemio = st.selectbox("Chemioterapia associata (es. Tripletta ARASENS)?", ["No", "Sì"], key="tm_chemio_check")
         with col_chem2:
             tipo_chemio = st.selectbox("Molecola Chemioterapica", ["Nessuna", "Docetaxel", "Cabazitaxel"], key="tm_tipo_chemio")
 
@@ -122,18 +172,62 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
         submit_tm = st.form_submit_button("💾 Salva Nuova Valutazione & Genera Referto PDF", type="primary")
         
         if submit_tm:
+            # Logica condizionale per la conclusione clinica automatica
+            is_prima_visita = len(paziente.get("visite", [])) == 0
+            conclusione_clinica_testo = ""
+            
+            if is_prima_visita:
+                gleason_inserito = paziente.get("gleason_score", "7 (3+4)")
+                descrizione_m = f"M{stad_m.split()[0][1:]}" if "M1" in stad_m else "M0 (assenti)"
+                descrizione_n = f"N{stad_n}"
+                
+                conclusione_clinica_testo = (
+                    f"\n\nConclusione clinica: Quadro di Adenocarcinoma prostatico (Gleason Score {gleason_inserito}) "
+                    f"con secondarismi ({descrizione_n}, {descrizione_m}) che configura un quadro "
+                    f"di carcinoma metastatico a {volume_stimato.lower()} per cui, sulla base delle "
+                    f"linee guida, delle più recenti evidenze scientifiche e sulla storia clinica "
+                    f"personale del paziente, si avvia terapia con {tipo_lhrh_tm} associato a {tipo_arsi_tm} "
+                    f"{'e ' + tipo_chemio if usa_chemio == 'Sì' else ''}."
+                )
+            else:
+                psa_precedente = float(paziente.get("ultimo_psa", valore_psa_tm))
+                if valore_psa_tm < psa_precedente:
+                    andamento_psa = "diminuzione del PSA"
+                    stato_clinico = "miglioramento"
+                elif valore_psa_tm > psa_precedente:
+                    andamento_psa = "rising del PSA"
+                    stato_clinico = "peggioramento"
+                else:
+                    andamento_psa = "stabilità del PSA"
+                    stato_clinico = "stabile"
+
+                if "Prosegue" in scelta_fine_visita:
+                    consiglio_terapeutico = "proseguire terapia in atto"
+                elif "Switch" in scelta_fine_visita:
+                    consiglio_terapeutico = f"switch terapeutico a {tipo_arsi_tm if tipo_arsi_tm != 'Nessuna' else opzione_mcrpc}"
+                else:
+                    consiglio_terapeutico = "avviare percorso di cure palliative / supportive"
+
+                conclusione_clinica_testo = (
+                    f"\n\nConclusione clinica: Quadro clinico in {stato_clinico} con {andamento_psa} "
+                    f"(PSA attuale: {valore_psa_tm} ng/mL), per cui si consiglia di {consiglio_terapeutico}."
+                )
+
             paziente["ultimo_psa"] = valore_psa_tm
             paziente["percorso_scelto"] = scelta_fine_visita
 
             dettagli_tm = (
                 f"Controllo Terapia Medica Avanzata\n"
-                f"• Stato: {presenza_metastasi} | Volume: {volume_malattia} | mCRPC: {stato_crpc} (Strategia: {opzione_mcrpc})\n"
-                f"• LH-RH: {fatto_lhrh_tm} ({tipo_lhrh_tm}) | ARSI: {usa_arsi_tm} ({tipo_arsi_tm})\n"
+                f"• Stadiazione: cT{stad_t} N{stad_n} M{stad_m} | Lesioni ossee: {num_lesioni_osseec} ({volume_stimato})\n"
+                f"• Comorbilità/Flag: Ipertensione/CV: {flag_ipertensione}, Diabete: {flag_diabete}, Neuro: {flag_neurologico}, Fragile: {flag_fragile}\n"
+                f"• mCRPC: {stato_crpc} (Strategia: {opzione_mcrpc})\n"
+                f"• LH-RH: {fatto_lhrh_tm} ({tipo_lhrh_tm}) | ARSI Scelta: {usa_arsi_tm} ({tipo_arsi_tm})\n"
                 f"• Chemio: {usa_chemio} ({tipo_chemio}) | HRR/BRCA: {brca_mutato} (PARPi: {tipo_parpi})\n"
                 f"• Bone Health: {terapia_osso} (Vit.D/Ca: {supp_vitd})\n"
                 f"• Biochimica: PSA {valore_psa_tm} ng/mL | Testosterone {valore_testosterone} ng/dL ({target_castrazione})\n"
                 f"• Decisione Fine Visita: {scelta_fine_visita}\n"
                 f"• Note: {note_tm}"
+                f"{conclusione_clinica_testo}"
             )
             
             dati_v_tm = {
@@ -154,8 +248,9 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
         ultima_visita = paziente["visite"][-1]
         
         note_pdf = [
+            f"Stadiazione e Volume: cT{stad_t}N{stad_n}M{stad_m} ({volume_stimato}, {num_lesioni_osseec} lesioni ossee)",
             f"Stato mCRPC: {stato_crpc} ({opzione_mcrpc})",
-            f"Terapia Sistemica: LHRH ({tipo_lhrh_tm}), ARSI ({tipo_arsi_tm}), PARPi ({tipo_parpi})",
+            f"Terapia Sistemica: LHRH ({tipo_lhrh_tm}), ARSI ({tipo_arsi_tm}), Chemio ({tipo_chemio}), PARPi ({tipo_parpi})",
             f"Bone Health: {terapia_osso} (Suppl. Vit D/Ca: {supp_vitd})",
             f"Decisione di fine visita: {scelta_fine_visita}",
             note_tm
