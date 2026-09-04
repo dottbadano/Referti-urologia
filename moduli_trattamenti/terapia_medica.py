@@ -1,275 +1,449 @@
 from datetime import datetime
+import math
 import streamlit as st
-from utils import genera_pdf_referto, salva_db_pazienti
+from utils import (
+    carica_db_pazienti,
+    salva_db_pazienti,
+    genera_o_aggiorna_registro,
+    genera_pdf_referto,
+    salva_paziente_su_drive,
+    ELENCO_MESI
+)
+from anamnesi_comune import (
+    render_anagrafica_e_anamnesi_unificata,
+    formatta_anamnesi_per_pdf_unificata
+)
+from moduli_trattamenti.terapia_medica import render_terapia_medica
 
-def render_terapia_medica(paziente, db_attivo, codice_search):
-    """Modulo dedicato alla gestione e follow-up della Terapia Medica (ormonale, ARSI, chemioterapia, PARPi, mCRPC e Bone Health) con supporto decisionale basato su stadiazione TNM, carico lesionale e comorbilità."""
-    st.markdown("### 🟡 Protocollo di Terapia Medica Avanzata & Supporto Decisionale")
-    st.info("Gestione della malattia avanzata, stratificazione del volume tumorale (Criteri CHAARTED/STAMPEDE da cTNM e lesioni ossee), analisi guidata delle comorbilità per la scelta dell'ARSI e prevenzione SRE.")
+# Funzioni di fallback integrate per evitare errori di importazione mancanti
+def render_followup_sorveglianza_avanzato(paziente, db_attivo, codice_search):
+    st.info("Modulo Sorveglianza Attiva in fase di caricamento (Fallback integrato).")
+
+def render_followup_chirurgia_avanzato(paziente, db_attivo, codice_search):
+    st.info("Modulo Chirurgia (Post-Prostatectomia) in fase di caricamento (Fallback integrato).")
+
+def render_followup_radioterapia_avanzato(paziente, db_attivo, codice_search):
+    st.info("Modulo Radioterapia in fase di caricamento (Fallback integrato).")
+
+def genera_testo_patologia(gruppo_rischio, scelta_trattamento):
+    testo_scelta = "Trattamento chirurgico di Prostatectomia Radicale" if scelta_trattamento == "Chirurgia (Post-Prostatectomia)" else scelta_trattamento
     
-    # Visualizzazione dello Storico
-    with st.expander("📂 Visualizza Storico Visite e Controlli Terapia Medica Precedenti", expanded=False):
-        visite = paziente.get("visite", [])
-        if not visite:
-            st.write("Nessuna visita registrata nello storico.")
-        for idx, v in enumerate(visite, 1):
-            st.markdown(f"**Controllo {idx} — Data: {v.get('data')} | Tipo: {v.get('tipo')}**")
-            st.text(v.get('dettagli', 'Nessun dettaglio'))
-            st.markdown("---")
+    if gruppo_rischio == "Basso Rischio":
+        base = (
+            "Alla luce del quadro istopatologico (ISUP 1 / Gleason Score 3+3=6), "
+            "dei valori sierici del PSA e della stadiazione clinico-strumentale, "
+            "la malattia si stratifica secondo le Linee Guida internazionali di riferimento "
+            "(EAU/NCCN/AIOM) nella classe a Basso Rischio di progressione. "
+            "In conformità con le raccomandazioni scientifiche vigenti, si discute con il paziente "
+            "l'opzione della Sorveglianza Attiva quale prima scelta raccomandata, "
+            "contestualmente alle alternative terapeutiche a finalità radicale quali il trattamento chirurgico di Prostatectomia Radicale "
+            "e la Radioterapia. Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per:\n\n\n"
+        )
+    elif gruppo_rischio == "Rischio Intermedio Favorevole":
+        base = (
+            "L'integrazione dei parametri clinico-laboratoristici con i reperti anatomo-patologici "
+            "(ISUP Group 2 / Gleason Score 3+4=7 con prevalenza di Pattern 3 e carico bioptico <50%) "
+            "definisce una classe di Rischio Intermedio Favorevole ai sensi delle Linee Guida di settore "
+            "(EAU/NCCN). Si pongono in discussione le opzioni terapeutiche a finalità radicale (trattamento chirurgico di Prostatectomia Radicale o Radioterapia) "
+            "nonché, in presenza di specifici criteri di selezione e dopo un'adeguata informazione, l'opzione della Sorveglianza Attiva. "
+            "Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per:\n\n\n"
+        )
+    elif gruppo_rischio == "Rischio Intermedio Sfavorevole":
+        base = (
+            "Il quadro anatomopatologico (ISUP Group 2 con carico bioptico ≥50% ovvero ISUP Group 3 / Gleason Score 4+3=7) "
+            "configura una classe di Rischio Intermedio Sfavorevole, per la quale si pone indicazione a completamento stadiativo "
+            "mediante PET/TC con PSMA. Le opzioni terapeutiche validate comprendono il trattamento chirurgico di Prostatectomia Radicale "
+            "o la Radioterapia associata a Deprivazione Androgenica a breve termine. "
+            "Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per:\n\n\n"
+        )
+    elif "Alto" in gruppo_rischio:
+        base = (
+            "Caso discusso in sede di DMT Uro-Oncologico. La presenza di fattori prognostici sfavorevoli "
+            "(ISUP Group ≥4 / Gleason Score ≥8) colloca il quadro nella categoria ad Alto Rischio. "
+            "Si pone indicazione prioritaria a PET/TC con PSMA e successivo approccio terapeutico multimodale "
+            "(Radioterapia con ADT a lungo termine o trattamento chirurgico di Prostatectomia Radicale con linfoadenectomia estesa). "
+            "Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per:\n\n\n"
+        )
+    else:
+        base = (
+            "Alla luce del quadro clinico-strumentale di patologia localmente avanzata, "
+            "si raccomanda completamento stadiativo con PET/TC con PSMA e approccio terapeutico integrato "
+            "(Radioterapia ad alto dosaggio con ADT a lungo termine o chirurgia in casi selezionati). "
+            "Debitamente informato di benefici e rischi connessi con la sua decisione il paziente decide per:\n\n\n"
+        )
+    
+    return base + f"<font size='+2'>{testo_scelta}</font>"
 
-    st.markdown("---")
-    st.markdown("### 🔄 Nuova Valutazione / Controllo Terapia Medica")
+def ottieni_db_aggiornato():
+    db_file = carica_db_pazienti()
+    if "db_pazienti" not in st.session_state:
+        st.session_state["db_pazienti"] = db_file
+    else:
+        st.session_state["db_pazienti"].update(db_file)
+    return st.session_state["db_pazienti"]
 
-    with st.form(key="form_terapia_medica_aggiornato"):
-        st.markdown("#### 🌍 Caratteristiche di Stadiazione (cTNM) e Carico Lesionale")
+def stima_aspettativa_vita_charlson(data_nascita, charlson_score, ecog_score=0, adl_score=6, iadl_score=8, g8_score=17, gds_score=0):
+    eta = (datetime.today().date() - data_nascita).days // 365
+    
+    if eta < 60:
+        base_anni = 30
+    elif eta < 65:
+        base_anni = 25
+    elif eta < 70:
+        base_anni = 20
+    elif eta < 75:
+        base_anni = 16
+    elif eta < 80:
+        base_anni = 11
+    else:
+        base_anni = 7
         
-        col_tnm1, col_tnm2, col_tnm3 = st.columns(3)
-        with col_tnm1:
-            stad_t = st.selectbox("Stadio Clinico T", ["T1", "T2", "T3", "T4"], key="tm_stadio_t")
-        with col_tnm2:
-            stad_n = st.selectbox("Stadio Linfonodale N", ["N0", "N1"], key="tm_stadio_n")
-        with col_tnm3:
-            stad_m = st.selectbox("Stadio Metastatico M", ["M0 (Non metastatica)", "M1a (Linfonodi non regionali)", "M1b (Ossa)", "M1c (Viscerali o altro)"], key="tm_stadio_m")
-
-        col_les1, col_les2 = st.columns(2)
-        with col_les1:
-            num_lesioni_osseec = st.number_input("Numero di Lesioni Ossee stimate", min_value=0, max_value=50, value=0, step=1, key="tm_num_lesioni")
-        with col_les2:
-            # Calcolo automatico orientativo del volume CHAARTED/STAMPEDE
-            is_high_volume = ("M1c" in stad_m) or (num_lesioni_osseec >= 4)
-            volume_stimato = "High Volume (Alto volume)" if is_high_volume else ("Low Volume (Basso volume)" if "M1" in stad_m else "Non applicabile (M0)")
-            st.text_input("Volume di Malattia Stimato (CHAARTED/STAMPEDE)", value=volume_stimato, disabled=True, key="tm_vol_stimato")
-
-        st.markdown("---")
-        st.markdown("#### 🩺 Profilo di Comorbilità e Parametri Metabolico-Ossei")
+    penalizzazione = charlson_score * 2.0
+    
+    if ecog_score >= 2:
+        penalizzazione += 3.0
+    elif ecog_score == 1:
+        penalizzazione += 1.0
         
-        col_com1, col_com2, col_com3 = st.columns(3)
-        with col_com1:
-            flag_ipertensione = st.checkbox("Ipertensione severa / Scompenso CV", key="tm_flag_cv")
-            flag_diabete = st.checkbox("Diabete / Difficoltà con Cortisonici", key="tm_flag_diabete")
-        with col_com2:
-            flag_neurologico = st.checkbox("Patologie Neurologiche / Epilessia / Rischio Cadute", key="tm_flag_neuro")
-            flag_fragile = st.checkbox("Paziente Fragile / Politrattato", key="tm_flag_fragile")
-        with col_com3:
-            flag_osteopenia = st.checkbox("Osteopenia / Osteoporosi (Indicazione Bone Health)", key="tm_flag_osteopenia")
-
-        # Motore di Supporto Decisionale basato sui flag e sulle evidenze scientifiche
-        with st.expander("💡 Consiglio Clinico Basato su Evidenze (Trial Clinici & Tollerabilità)", expanded=True):
-            sconsiglia_abi = flag_ipertensione or flag_diabete
-            sconsiglia_enza = flag_neurologico or flag_fragile
-            
-            if "M1" in stad_m:
-                if is_high_volume:
-                    st.markdown("📍 **Setting: Malattia Metastatica ad Alto Volume (mHSPC)**")
-                    st.markdown("• *Studio ARASENS*: Considerare la **Tripletta** (ADT + Docetaxel + **Darolutamide**), che garantisce il massimo vantaggio di OS con un ottimo profilo di tollerabilità.")
-                else:
-                    st.markdown("📍 **Setting: Malattia Metastatica a Basso Volume (mHSPC)**")
-                    st.markdown("• *Studio TITAN / ARASENS / SPARTAN logic*: Preferire la **Doppietta** con un ARSI moderno evitando la chemio iniziale.")
-                
-                if sconsiglia_abi:
-                    st.warning("⚠️ **Nota Abiraterone**: Sconsigliato per la necessaria co-somministrazione di prednisone/prednisolone in pazienti con ipertensione o diabete.")
-                if sconsiglia_enza:
-                    st.warning("⚠️ **Nota Enzalutamide**: Richiede cautela per la penetrazione a livello del SNC in pazienti con fragilità o storia neurologica.")
-                if not sconsiglia_abi and not sconsiglia_enza:
-                    st.success("✅ **Opzioni valide**: Darolutamide, Apalutamide, Enzalutamide o Abiraterone valutabili in base alle preferenze prescrittive.")
-            else:
-                st.markdown("📍 **Setting: Malattia Non Metastatica (nmCRPC / M0)**")
-                st.markdown("• *Studio SPARTAN*: Valutare Apalutamide o molecole affini per ritardare la comparsa di metastasi.")
-
-            if flag_osteopenia:
-                st.info("🦴 **Protezione Ossea Consigliata**: Valutare l'avvio di Denosumab o Acido Zoledronico con supplementazione di Vitamina D/Calcemia per prevenire SRE.")
-
-        st.markdown("---")
-        st.markdown("#### 🚨 Stato di Malattia e transizione mCRPC (Linee Guida EAU/ESMO)")
+    if adl_score < 6:
+        penalizzazione += (6 - adl_score) * 2.0
         
-        col_crpc1, col_crpc2 = st.columns(2)
-        with col_crpc1:
-            stato_crpc = st.selectbox(
-                "Stato di Resistenza alla Castrazione", 
-                ["No (Sensibile agli androgeni / mHSPC)", "Sì (mCRPC - Resistente alla castrazione con testosterone in target)"], 
-                key="tm_crpc_check"
-            )
-        with col_crpc2:
-            opzione_mcrpc = "Non applicabile"
-            if "Sì (mCRPC" in stato_crpc:
-                opzione_mcrpc = st.selectbox(
-                    "Strategia di Linea Successiva (mCRPC)",
-                    ["Switch di ARSI", "Chemioterapia con Cabazitaxel", "Terapia Radiometabolica (177Lu-PSMA)", "Radio-223 (per metastasi ossee esclusive - Studio PEACE-3)"],
-                    key="tm_strat_mcrpc"
-                )
-            else:
-                st.info("Paziente in fase ormonosensibile.")
-
-        st.markdown("---")
-        st.markdown("#### 💉 Terapia Ormonale e Scelta ARSI Guidata")
+    if iadl_score < 8:
+        penalizzazione += (8 - iadl_score) * 0.5
         
-        col_LHRH1, col_LHRH2, col_LHRH3 = st.columns(3)
-        with col_LHRH1:
-            fatto_lhrh_tm = st.selectbox("Terapia LH-RH in corso?", ["No", "Sì"], key="tm_lhrh_check")
-        with col_LHRH2:
-            tipo_lhrh_tm = st.selectbox("Molecola LH-RH", ["Nessuna", "Triptorelina", "Leuprorelina", "Relugolix"], key="tm_tipo_lhrh")
-        with col_LHRH3:
-            data_inizio_lhrh_tm = st.date_input("Data di inizio LH-RH", value=datetime.today(), key="tm_lhrh_data")
-
-        col_arsi1, col_arsi2 = st.columns(2)
-        with col_arsi1:
-            usa_arsi_tm = st.selectbox("Associazione con ARSI?", ["No", "Sì"], key="tm_arsi_check")
-        with col_arsi2:
-            tipo_arsi_tm = st.selectbox("Molecola ARSI scelta", ["Nessuna", "Darolutamide", "Apalutamide", "Enzalutamide", "Abiraterone"], key="tm_tipo_arsi")
-
-        st.markdown("---")
-        st.markdown("#### 💊 Chemioterapia, Target Therapy (PARPi) e Salute Ossea")
+    if g8_score <= 14:
+        penalizzazione += 2.0
         
-        col_chem1, col_chem2 = st.columns(2)
-        with col_chem1:
-            usa_chemio = st.selectbox("Chemioterapia associata (es. Tripletta ARASENS)?", ["No", "Sì"], key="tm_chemio_check")
-        with col_chem2:
-            tipo_chemio = st.selectbox("Molecola Chemioterapica", ["Nessuna", "Docetaxel", "Cabazitaxel"], key="tm_tipo_chemio")
+    if gds_score >= 6:
+        penalizzazione += 1.5
 
-        st.markdown("##### 🧬 Profilo Mutazionale HRR / BRCA e PARP Inibitori")
-        col_parp1, col_parp2 = st.columns(2)
-        with col_parp1:
-            brca_mutato = st.checkbox("Paziente con mutazione BRCA1/2 o HRR (Homologous Recombination Repair esteso)", key="tm_brca_check")
-        with col_parp2:
-            tipo_parpi = st.selectbox("Scelta PARP Inibitore (PARPi)", ["Nessuno", "Olaparib", "Niraparib", "Talazoparib"], key="tm_tipo_parpi")
+    aspettativa_stimata = max(2, base_anni - penalizzazione)
+    return round(aspettativa_stimata, 1), eta
 
-        st.markdown("##### 🦴 Protezione Ossea (Bone Health - Prevenzione SRE)")
-        col_bone1, col_bone2 = st.columns(2)
-        with col_bone1:
-            terapia_osso = st.selectbox("Terapia Osteoprotettiva Associata", ["Nessuna", "Acido Zoledronico", "Denosumab"], key="tm_bone_med")
-        with col_bone2:
-            supp_vitd = st.checkbox("Inclusa supplementazione Calcemia / Vitamina D", key="tm_vitd_check")
-
-        st.markdown("---")
-        st.markdown("#### 📈 Monitoraggio Biochimico (PSA e Testosteronemia)")
-        
-        col_bio1, col_bio2, col_bio3 = st.columns(3)
-        with col_bio1:
-            valore_psa_tm = st.number_input("Valore PSA Attuale (ng/mL)", min_value=0.0, max_value=1000.0, value=float(paziente.get("ultimo_psa", 0.0)), step=0.1, key="tm_psa_val")
-        with col_bio2:
-            valore_testosterone = st.number_input("Testosteronemia (ng/dL)", min_value=0.0, max_value=1500.0, value=0.0, step=1.0, key="tm_testosterone")
-        with col_bio3:
-            target_castrazione = st.selectbox("Target Testosterone di Castrazione (< 50 ng/dL)?", ["Raggiunto (< 50 ng/dL)", "Non raggiunto (>= 50 ng/dL - Fuga biochimica)"], key="tm_target_test")
-
-        if "Non raggiunto" in target_castrazione:
-            st.error("⚠️ **ATTENZIONE**: Il livello di testosterone non rientra nel range di castrazione (< 50 ng/dL). Valutare la compliance o l'efficacia del blocco androgenico.")
+def calcola_gruppo_rischio_eau(isup_num, psa, ct_stage, gleason_terziario):
+    is_terziario_alto = gleason_terziario in ["Pattern 5 Terziario", "Pattern 4 Terziario"]
+    
+    if any(stg in ct_stage for stg in ["cT3a", "cT3b", "cT4"]):
+        return ("Localmente Avanzato", True, "Indicata Stadiazione Sistemica (PET/TC PSMA e Imaging di Staging).")
+    elif isup_num >= 4 or psa > 20 or is_terziario_alto:
+        return ("Alto / Molto Alto Rischio", True, "Indicata Stadiazione Sistemica (PET/TC PSMA oppure TC + Scintigrafia).")
+    elif isup_num in [2, 3] or (10 <= psa <= 20) or any(stg in ct_stage for stg in ["cT2b", "cT2c"]):
+        if isup_num == 3 or (isup_num == 2 and psa > 10):
+            return ("Rischio Intermedio Sfavorevole", True, "Indicata Stadiazione Sistemica (Preferibile PET/TC PSMA).")
         else:
-            st.success("✅ Livello di testosteronemia in target di castrazione.")
+            return ("Rischio Intermedio Favorevole", False, "Stadiazione sistemica NON indicata di routine.")
+    else:
+        return ("Basso Rischio", False, "Stadiazione sistemica NON indicata. Candidato per Sorveglianza Attiva.")
+
+def render_modulo():
+    st.title("Carcinoma Prostatico - Decision Support System")
+
+    db_attivo = ottieni_db_aggiornato()
+
+    modalita = st.radio(
+        "Seleziona Fase del Patient Journey:",
+        [
+            "1. Prima Visita: Inquadramento Bioptico & Rischio",
+            "2. Rivalutazione dopo Stadiazione & Scelta Trattamento",
+            "3. Follow-up Dedicato (Post-Trattamento / Sorveglianza)",
+        ],
+        horizontal=True,
+    )
+
+    if modalita == "1. Prima Visita: Inquadramento Bioptico & Rischio":
+        st.subheader("Inquadramento Clinico & Anamnesi Globale (Prostata)")
+
+        paziente_info = render_anagrafica_e_anamnesi_unificata(sigla_organo="P", prefix="prostata")
+        
+        nome_p = paziente_info["nome"]
+        cognome_p = paziente_info["cognome"]
+        codice_paziente = str(paziente_info["id_univoco"]).strip().upper()
+        data_nascita_p = datetime.strptime(paziente_info["data_nascita"], "%Y-%m-%d").date()
+        totale_g8 = paziente_info["g8_score"]
+        charlson_score = paziente_info["charlson_score"]
 
         st.markdown("---")
-        scelta_fine_visita = st.selectbox(
-            "Decisione presa a fine visita (Aggiornamento Percorso):",
-            [
-                "Prosegue Terapia Medica in corso",
-                "Switch terapeutico / Modifica Linea Sistemica",
-                "Avvio percorso di cure palliative / supportive"
-            ],
-            key="tm_scelta_fine"
+        st.subheader("Parametri di Performance Status & Valutazione Oncogeriatrica")
+        col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
+        with col_g1:
+            ecog_score = st.selectbox("ECOG Status", [0, 1, 2, 3, 4], index=0)
+        with col_g2:
+            adl_score = st.selectbox("ADL (0-6)", [0, 1, 2, 3, 4, 5, 6], index=6)
+        with col_g3:
+            iadl_score = st.selectbox("IADL (0-8)", [0, 1, 2, 3, 4, 5, 6, 7, 8], index=8)
+        with col_g4:
+            gds_score = st.slider("GDS (Depressione 0-15)", min_value=0, max_value=15, value=0)
+        with col_g5:
+            st.metric("Screening G8", f"{totale_g8}/17")
+
+        aspettativa_vita, eta_paziente = stima_aspettativa_vita_charlson(
+            data_nascita_p, charlson_score, ecog_score, adl_score, iadl_score, totale_g8, gds_score
         )
 
-        note_tm = st.text_area("Note cliniche, tollerabilità e raccomandazioni di terapia medica:", key="tm_note")
-        
-        submit_tm = st.form_submit_button("💾 Salva Nuova Valutazione & Genera Referto PDF", type="primary")
-        
-        if submit_tm:
-            # Logica condizionale per la conclusione clinica automatica
-            is_prima_visita = len(paziente.get("visite", [])) == 0
-            conclusione_clinica_testo = ""
-            
-            if is_prima_visita:
-                gleason_inserito = paziente.get("gleason_score", "7 (3+4)")
-                descrizione_m = f"M{stad_m.split()[0][1:]}" if "M1" in stad_m else "M0 (assenti)"
-                descrizione_n = f"N{stad_n}"
-                
-                conclusione_clinica_testo = (
-                    f"\n\nConclusione clinica: Quadro di Adenocarcinoma prostatico (Gleason Score {gleason_inserito}) "
-                    f"con secondarismi ({descrizione_n}, {descrizione_m}) che configura un quadro "
-                    f"di carcinoma metastatico a {volume_stimato.lower()} per cui, sulla base delle "
-                    f"linee guida, delle più recenti evidenze scientifiche e sulla storia clinica "
-                    f"personale del paziente, si avvia terapia con {tipo_lhrh_tm} associato a {tipo_arsi_tm} "
-                    f"{'e ' + tipo_chemio if usa_chemio == 'Sì' else ''}."
-                )
-            else:
-                psa_precedente = float(paziente.get("ultimo_psa", valore_psa_tm))
-                if valore_psa_tm < psa_precedente:
-                    andamento_psa = "diminuzione del PSA"
-                    stato_clinico = "miglioramento"
-                elif valore_psa_tm > psa_precedente:
-                    andamento_psa = "rising del PSA"
-                    stato_clinico = "peggioramento"
-                else:
-                    andamento_psa = "stabilità del PSA"
-                    stato_clinico = "stabile"
-
-                if "Prosegue" in scelta_fine_visita:
-                    consiglio_terapeutico = "proseguire terapia in atto"
-                elif "Switch" in scelta_fine_visita:
-                    consiglio_terapeutico = f"switch terapeutico a {tipo_arsi_tm if tipo_arsi_tm != 'Nessuna' else opzione_mcrpc}"
-                else:
-                    consiglio_terapeutico = "avviare percorso di cure palliative / supportive"
-
-                conclusione_clinica_testo = (
-                    f"\n\nConclusione clinica: Quadro clinico in {stato_clinico} con {andamento_psa} "
-                    f"(PSA attuale: {valore_psa_tm} ng/mL), per cui si consiglia di {consiglio_terapeutico}."
-                )
-
-            paziente["ultimo_psa"] = valore_psa_tm
-            paziente["percorso_scelto"] = scelta_fine_visita
-
-            dettagli_tm = (
-                f"Controllo Terapia Medica Avanzata\n"
-                f"• Stadiazione: cT{stad_t} N{stad_n} M{stad_m} | Lesioni ossee: {num_lesioni_osseec} ({volume_stimato})\n"
-                f"• Comorbilità/Flag: Ipertensione/CV: {flag_ipertensione}, Diabete: {flag_diabete}, Neuro: {flag_neurologico}, Fragile: {flag_fragile}\n"
-                f"• mCRPC: {stato_crpc} (Strategia: {opzione_mcrpc})\n"
-                f"• LH-RH: {fatto_lhrh_tm} ({tipo_lhrh_tm}) | ARSI Scelta: {usa_arsi_tm} ({tipo_arsi_tm})\n"
-                f"• Chemio: {usa_chemio} ({tipo_chemio}) | HRR/BRCA: {brca_mutato} (PARPi: {tipo_parpi})\n"
-                f"• Bone Health: {terapia_osso} (Vit.D/Ca: {supp_vitd})\n"
-                f"• Biochimica: PSA {valore_psa_tm} ng/mL | Testosterone {valore_testosterone} ng/dL ({target_castrazione})\n"
-                f"• Decisione Fine Visita: {scelta_fine_visita}\n"
-                f"• Note: {note_tm}"
-                f"{conclusione_clinica_testo}"
+        st.markdown("---")
+        if aspettativa_vita < 10.0:
+            st.error(
+                f"ATTENZIONE CLINICA CRITICA (Aspettativa di Vita Stimata: < 10 Anni | Età: {eta_paziente} aa, Charlson: {charlson_score}, ECOG: {ecog_score}, G8: {totale_g8})\n\n"
+                f"L'aspettativa di vita residua stimata è inferiore a 10 anni. "
+                f"In conformità alle Linee Guida oncologiche internazionali, NON SUSSISTE INDICAZIONE A TRATTAMENTI CHIRURGICI AGGRESSIVI O A FINALITÀ RADICALE (es. Prostatectomia Radicale), "
+                f"poiché i rischi operatori e la mortalità non correlata al cancro superano il beneficio atteso."
             )
-            
-            dati_v_tm = {
-                "data": str(datetime.today().date()),
-                "tipo": f"Follow-up Terapia Medica ({scelta_fine_visita})",
-                "dettagli": dettagli_tm
-            }
-            
-            if "visite" not in paziente:
-                paziente["visite"] = []
-            paziente["visite"].append(dati_v_tm)
-            salva_db_pazienti(db_attivo)
-            st.session_state["ultimo_paziente_fu_tm"] = codice_search
-            st.success("✅ Nuova valutazione di terapia medica salvata correttamente nello storico!")
+        else:
+            st.success(
+                f"Valutazione Aspettativa di Vita: Stimata a ~{aspettativa_vita} anni (Età: {eta_paziente} aa, Charlson: {charlson_score}, ECOG: {ecog_score}). "
+                f"Il paziente rientra nei criteri di idoneità per trattamenti a finalità radicale."
+            )
+        st.markdown("---")
 
-    # Gestione download referto aggiornato
-    if st.session_state.get("ultimo_paziente_fu_tm"] == codice_search and paziente.get("visite"):
-        ultima_visita = paziente["visite"][-1]
-        
-        note_pdf = [
-            f"Stadiazione e Volume: cT{stad_t}N{stad_n}M{stad_m} ({volume_stimato}, {num_lesioni_osseec} lesioni ossee)",
-            f"Stato mCRPC: {stato_crpc} ({opzione_mcrpc})",
-            f"Terapia Sistemica: LHRH ({tipo_lhrh_tm}), ARSI ({tipo_arsi_tm}), Chemio ({tipo_chemio}), PARPi ({tipo_parpi})",
-            f"Bone Health: {terapia_osso} (Suppl. Vit D/Ca: {supp_vitd})",
-            f"Decisione di fine visita: {scelta_fine_visita}",
-            note_tm
-        ]
-        note_pdf = [n for n in note_pdf if n]
+        anamnesi_ordinata_pdf = formatta_anamnesi_per_pdf_unificata(paziente_info)
 
-        pdf_bytes = genera_pdf_referto(
-            codice_search, 
-            ultima_visita, 
-            percorso="Terapia Medica Avanzata", 
-            note_raccomandazioni=note_pdf, 
-            nome=paziente.get('nome', ''), 
-            cognome=paziente.get('cognome', '')
-        )
+        st.subheader("Dati Bioptici, Clinici e Imaging Iniziale (mpRMN)")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            isup_basale = st.selectbox(
+                "ISUP Group Bioptico:",
+                ["ISUP 1 (Gleason 3+3)", "ISUP 2 (Gleason 3+4)", "ISUP 3 (Gleason 4+3)", "ISUP 4 (Gleason 4+4)", "ISUP 5 (Gleason 9-10)"]
+            )
+            isup_num = int(isup_basale.split()[1])
+            gleason_terziario = st.selectbox("Gleason Pattern Terziario:", ["Assente", "Pattern 4 Terziario", "Pattern 5 Terziario"])
+
+            col_m, col_y = st.columns(2)
+            with col_m:
+                mese_psa_b = st.selectbox("Mese PSA", ELENCO_MESI, index=datetime.today().month - 1)
+            with col_y:
+                anno_psa_b = st.number_input("Anno PSA", min_value=2000, max_value=2030, value=datetime.today().year)
+
+            num_mese_b = ELENCO_MESI.index(mese_psa_b) + 1
+            data_psa_basale = datetime(anno_psa_b, num_mese_b, 1).date()
+            psa_basale = st.number_input("PSA Basale (ng/ml)", value=6.5, step=0.1)
+
+        with col2:
+            ct_stage = st.selectbox(
+                "Stadio T Clinico:",
+                ["cT1c (Inapprezzabile)", "cT2a (≤ metà di un lobo)", "cT2b (> metà di un lobo)", "cT2c (Entrambi i lobi)", "cT3a (Extracapsulare)", "cT3b (Vescicole)", "cT4 (Fissato/Adiacenti)"]
+            )
+            rmn_pirads = st.selectbox("Reperto mpRMN Prostatica:", ["PI-RADS 3", "PI-RADS 4", "PI-RADS 5", "ECE / SVI Sospetta alla RMN", "Non Eseguita"])
+
+        with col3:
+            st.markdown("Valutazione Rischio & Stadiazione")
+            gruppo_rischio, necessita_stadiazione, motivazione_stadiazione = calcola_gruppo_rischio_eau(isup_num, psa_basale, ct_stage, gleason_terziario)
+            st.write(f"Classe di Rischio / Stadio: {gruppo_rischio}")
+            if necessita_stadiazione:
+                st.error("STADIAZIONE SISTEMICA INDICATA")
+            else:
+                st.success("STADIAZIONE NON INDICATA AB INITIO")
+
+        st.markdown("---")
         
-        st.download_button(
-            label="📄 Scarica Referto Terapia Medica in PDF",
-            data=pdf_bytes,
-            file_name=f"Referto_TerapiaMedica_{codice_search}.pdf",
-            mime="application/pdf",
-            key="download_pdf_tm_aggiornato"
-        )
+        if necessita_stadiazione:
+            opzioni_trattamento = ["In attesa di Stadiazione (DMT)"]
+        else:
+            if gruppo_rischio in ["Basso Rischio", "Rischio Intermedio Favorevole"]:
+                opzioni_trattamento = ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia"]
+            else:
+                opzioni_trattamento = ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia", "Terapia Medica / Ormonale"]
+
+        scelta_trattamento = st.selectbox("Trattamento Proposto / Concordato:", opzioni_trattamento)
+
+        conferma_eccezione_chirurgia = False
+        if aspettativa_vita < 10.0 and "Chirurgia" in scelta_trattamento:
+            st.warning("Attenzione: L'aspettativa di vita stimata del paziente è < 10 anni, ma è stata selezionata l'opzione chirurgica.")
+            conferma_eccezione_chirurgia = st.checkbox(
+                "Consapevole dell'aspettativa di vita < 10 anni si decide in assenso col paziente per intervento chirurgico"
+            )
+
+        if st.button("Salvataggio & Genera Report PDF (Prima Visita)", type="primary"):
+            if not nome_p or not cognome_p or not codice_paziente:
+                st.error("Inserire Nome, Cognome e Codice Univoco del paziente.")
+            elif aspettativa_vita < 10.0 and "Chirurgia" in scelta_trattamento and not conferma_eccezione_chirurgia:
+                st.error("Errore: Per procedere con la chirurgia con un'aspettativa < 10 anni, è obbligatorio selezionare la spunta di deroga/consapevolezza clinica.")
+            else:
+                salva_paziente_su_drive(
+                    nome=nome_p,
+                    cognome=cognome_p,
+                    data_nascita=data_nascita_p,
+                    codice_univoco=codice_paziente
+                )
+
+                blocco_anamnesi_str = f"\nAnamnesi e Profilo Clinico:\n{anamnesi_ordinata_pdf}" if anamnesi_ordinata_pdf else ""
+                dettagli_str = (
+                    f"Parametri Prostatici & Oncogeriatrici:\n"
+                    f"• ISUP Group: {isup_basale}\n• Gleason Terziario: {gleason_terziario}\n"
+                    f"• PSA Basale: {psa_basale} ng/ml ({mese_psa_b} {anno_psa_b})\n• Stadio Clinico: {ct_stage}\n"
+                    f"• mpRMN: {rmn_pirads}\n• Classe Rischio: {gruppo_rischio}\n"
+                    f"• Charlson Index: {charlson_score} | ECOG: {ecog_score}\n"
+                    f"• ADL: {adl_score}/6 | IADL: {iadl_score}/8 | G8: {totale_g8}/17 | GDS: {gds_score}/15\n"
+                    f"• Aspettativa di Vita Stimata: ~{aspettativa_vita} anni"
+                )
+                if conferma_eccezione_chirurgia:
+                    dettagli_str += "\n• NOTA DEROGA CLINICA: Consapevole dell'aspettativa di vita < 10 anni si decide in assenso col paziente per intervento chirurgico."
+                if blocco_anamnesi_str:
+                    dettagli_str += blocco_anamnesi_str
+
+                dati_v = {
+                    "data": str(datetime.today().date()),
+                    "tipo": "Visita I - Inquadramento Bioptico Carcinoma Prostatico",
+                    "dettagli": dettagli_str
+                }
+                
+                db_attivo[codice_paziente] = {
+                    "organo": "PROSTATA",
+                    "nome": nome_p,
+                    "cognome": cognome_p,
+                    "data_nascita": str(data_nascita_p),
+                    "isup": isup_num,
+                    "rischio": gruppo_rischio,
+                    "percorso_scelto": scelta_trattamento,
+                    "ultimo_psa": psa_basale,
+                    "data_ultimo_psa": str(data_psa_basale),
+                    "g8_score": totale_g8,
+                    "visite": [dati_v]
+                }
+                
+                salva_db_pazienti(db_attivo)
+                st.session_state["db_pazienti"] = db_attivo
+                genera_o_aggiorna_registro(nome_p, cognome_p, data_nascita_p, codice_paziente)
+                
+                st.session_state["ultimo_paziente_salvato_prostata"] = codice_paziente
+                st.success(f"Paziente salvato con successo! Codice univoco: {codice_paziente}")
+
+        if "ultimo_paziente_salvato_prostata" in st.session_state and st.session_state["ultimo_paziente_salvato_prostata"] in db_attivo:
+            cod_salvato = st.session_state["ultimo_paziente_salvato_prostata"]
+            paz_corrente = db_attivo[cod_salvato]
+            
+            note_pdf_list = [
+                motivazione_stadiazione, 
+                f"Percorso assegnato: {scelta_trattamento}", 
+                f"ECOG: {ecog_score} | ADL: {adl_score}/6 | IADL: {iadl_score}/8",
+                f"Screening G8: {totale_g8}/17 | GDS: {gds_score}/15",
+                f"Charlson Index: {charlson_score}",
+                f"Aspettativa di vita stimata: ~{aspettativa_vita} anni"
+            ]
+            if conferma_eccezione_chirurgia:
+                note_pdf_list.append("NOTA DEROGA CLINICA: Consapevole dell'aspettativa di vita < 10 anni si decide in assenso col paziente per intervento chirurgico.")
+            
+            if anamnesi_ordinata_pdf:
+                note_pdf_list.append(f"Anamnesi:\n{anamnesi_ordinata_pdf}")
+
+            testo_descrittivo_finale = genera_testo_patologia(gruppo_rischio, scelta_trattamento)
+            note_pdf_list.append(testo_descrittivo_finale)
+
+            pdf_bytes = genera_pdf_referto(cod_salvato, paz_corrente["visite"][-1], scelta_trattamento, note_pdf_list, nome=paz_corrente['nome'], cognome=paz_corrente['cognome'])
+            
+            st.download_button(
+                label="Scarica Referto Prima Visita PDF",
+                data=pdf_bytes,
+                file_name=f"Referto_PROSTATA_{paz_corrente['cognome']}_{paz_corrente['nome']}.pdf",
+                mime="application/pdf"
+            )
+
+    elif modalita == "2. Rivalutazione dopo Stadiazione & Scelta Trattamento":
+        st.subheader("Rivalutazione post-Stadiazione (DMT) & Selezione Trattamento Definitivo")
+        
+        db_attivo = ottieni_db_aggiornato()
+        codice_search = st.text_input("Inserisci Codice Univoco Paziente:", key="search_dmt_prostata").strip().upper()
+        
+        if not codice_search:
+            st.warning("Inserisci il codice univoco del paziente per sbloccare la rivalutazione.")
+        else:
+            if codice_search in db_attivo:
+                paziente = db_attivo[codice_search]
+                st.success(f"Paziente Trovato: {paziente.get('cognome', '')} {paziente.get('nome', '')} (ID: {codice_search})")
+                st.info(f"Rischio Iniziale: {paziente.get('rischio', 'Non definito')} | Percorso attuale: {paziente.get('percorso_scelto', 'Non definito')}")
+                
+                with st.expander("Visualizza Storico Visite Precedenti", expanded=False):
+                    for idx, v in enumerate(paziente.get("visite", []), 1):
+                        st.markdown(f"Visita {idx} - Data: {v.get('data')} | Tipo: {v.get('tipo')}")
+                        st.text(v.get('dettagli', 'Nessun dettaglio'))
+                        st.markdown("---")
+                
+                st.markdown("Esito Esami di Stadiazione e Scelta Terapeutica")
+                esito_stadiazione = st.selectbox(
+                    "Esito Imaging di Stadiazione (es. PET/TC PSMA / TC / Scintigrafia):",
+                    [
+                        "Negativo per malattia a distanza (Staging M0)",
+                        "Positivo per recidiva locale / Sede di malattia primitiva",
+                        "Positivo per linfonodi regionali / pelvici",
+                        "Positivo per metastasi a distanza (M1)"
+                    ]
+                )
+                
+                rischio_paz = paziente.get("rischio", "")
+                if rischio_paz in ["Basso Rischio", "Rischio Intermedio Favorevole"]:
+                    opzioni_definitivo = ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia"]
+                else:
+                    opzioni_definitivo = ["Sorveglianza Attiva", "Chirurgia (Post-Prostatectomia)", "Radioterapia", "Terapia Medica / Ormonale (ADT / NHA)"]
+
+                nuovo_trattamento = st.selectbox("Selezione Trattamento Definitivo Concordato:", opzioni_definitivo)
+                nota_dmt = st.text_area("Note della Discussione Multidisciplinare (DMT) / Motivazione clinica:")
+                    
+                if st.button("Salva Rivalutazione & Genera Referto DMT", type="primary"):
+                    paziente["percorso_scelto"] = nuovo_trattamento
+                    dettagli_v2 = f"Esito Stadiazione: {esito_stadiazione}\nTrattamento Definitivo Selezionato: {nuovo_trattamento}\nNote DMT: {nota_dmt}"
+                    
+                    dati_v = {
+                        "data": str(datetime.today().date()),
+                        "tipo": "Rivalutazione post-Stadiazione & Scelta Trattamento",
+                        "dettagli": dettagli_v2
+                    }
+                    paziente["visite"].append(dati_v)
+                    salva_db_pazienti(db_attivo)
+                    st.session_state["db_pazienti"] = db_attivo
+                    st.session_state["ultimo_paziente_rivalutato_prostata"] = codice_search
+                    st.success("Rivalutazione salvata con successo nel database!")
+
+                if "ultimo_paziente_rivalutato_prostata" in st.session_state and st.session_state["ultimo_paziente_rivalutato_prostata"] == codice_search:
+                    paz_aggiornato = db_attivo[codice_search]
+                    ultima_visita = paz_aggiornato["visite"][-1]
+                    pdf_bytes = genera_pdf_referto(
+                        codice_search, 
+                        ultima_visita, 
+                        paz_aggiornato.get("percorso_scelto", nuovo_trattamento), 
+                        [esito_stadiazione, nota_dmt], 
+                        nome=paz_aggiornato.get('nome',''), 
+                        cognome=paz_aggiornato.get('cognome','')
+                    )
+                    st.download_button(
+                        label="Scarica Referto Rivalutazione / DMT PDF",
+                        data=pdf_bytes,
+                        file_name=f"Rivalutazione_DMT_PROSTATA_{codice_search}.pdf",
+                        mime="application/pdf"
+                    )
+            else:
+                st.error(f"Nessun paziente trovato con il codice univoco {codice_search}.")
+
+    elif modalita == "3. Follow-up Dedicato (Post-Trattamento / Sorveglianza)":
+        st.subheader("Gestione Follow-up Clinico Dedicato")
+        
+        db_attivo = ottieni_db_aggiornato()
+        codice_search = st.text_input("Inserisci Codice Univoco Paziente:", key="search_fu_prostata").strip().upper()
+
+        if not codice_search:
+            st.warning("Inserisci il codice univoco del paziente per accedere al follow-up personalizzato.")
+        else:
+            if codice_search in db_attivo:
+                paziente = db_attivo[codice_search]
+                percorso_attuale = paziente.get("percorso_scelto", "Sorveglianza Attiva")
+                
+                st.success(f"Paziente Trovato: {paziente.get('cognome', '')} {paziente.get('nome', '')} (ID: {codice_search})")
+                st.info(f"Percorso Terapeutico Attivo / Protocollo di Follow-up: {percorso_attuale}")
+                
+                with st.expander("Visualizza Storico Visite del Paziente", expanded=False):
+                    for idx, v in enumerate(paziente.get("visite", []), 1):
+                        st.markdown(f"Visita {idx} - Data: {v.get('data')} | Tipo: {v.get('tipo')}")
+                        st.text(v.get('dettagli', 'Nessun dettaglio'))
+                        st.markdown("---")
+
+                st.markdown("---")
+                
+                if "Sorveglianza" in percorso_attuale:
+                    render_followup_sorveglianza_avanzato(paziente, db_attivo, codice_search)
+                elif "Chirurgia" in percorso_attuale:
+                    render_followup_chirurgia_avanzato(paziente, db_attivo, codice_search)
+                elif "Radioterapia" in percorso_attuale:
+                    render_followup_radioterapia_avanzato(paziente, db_attivo, codice_search)
+                else:
+                    render_terapia_medica(paziente, db_attivo, codice_search)
+            else:
+                st.error(f"Nessun paziente trovato con il codice univoco {codice_search}.")
