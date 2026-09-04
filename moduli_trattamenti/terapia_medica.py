@@ -53,115 +53,111 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
     if tipo_accesso == "Prima Visita / Inquadramento & Stadiazione TNM":
         st.markdown("### Inquadramento Iniziale, Stadiazione TNM e Stratificazione del Volume")
         
-        with st.form(key="form_prima_visita_medica"):
-            st.markdown("**1. Stadiazione Clinica TNM:**")
-            col_t1, col_t2, col_t3 = st.columns(3)
-            with col_t1:
-                t_stage = st.selectbox("Stadio T (Primario):", ["cT1c", "cT2a", "cT2b", "cT2c", "cT3a", "cT3b", "cT4"])
-            with col_t2:
-                n_stage = st.selectbox("Stadio N (Linfonodi Regionali):", ["cN0", "cN1", "cNX"])
-            with col_t3:
-                m_stage = st.selectbox(
-                    "Stadio M (Metastasi a Distanza):", 
-                    ["cM0 (Nessuna metastasi)", "cM1a (Linfonodi non regionali)", "cM1b (Ossee)", "cM1c (Viscerali / Altre)"]
-                )
-
-            st.markdown("---")
-            st.markdown("**2. Dettaglio Metastasi e Criteri di Volume (CHAARTED / STAMPEDE):**")
-            
-            # Riconoscimento robusto dello stato metastatico (M1)
-            ha_metastasi = m_stage.startswith("cM1")
-            
-            num_lesioni_ossee = 0
-            flag_metastasi_viscerali = False
-            
-            if ha_metastasi:
-                st.markdown(f"✅ **Quadro Rilevato:** Paziente **METASTATICO** ({m_stage}). Inserire i parametri di estensione:")
-                
-                # Se è M1b o se l'utente seleziona M1 in generale, permettiamo di inserire le lesioni ossee
-                num_lesioni_ossee = st.number_input(
-                    "Numero di lesioni ossee stimate (Inserire un valore da 1 a 50):", 
-                    min_value=0, 
-                    max_value=50, 
-                    value=4 if "cM1b" in m_stage else 0,
-                    step=1
-                )
-                
-                flag_metastasi_viscerali = st.checkbox(
-                    "Presenti anche metastasi viscerali (es. fegato, polmone, pleura)?",
-                    value=True if "cM1c" in m_stage else False
-                )
-            else:
-                st.info("🛡️ **Quadro Rilevato:** Paziente **NON METASTATICO (M0)**.")
-
-            # Classificazione automatica High / Low volume (Criteri CHAARTED: >=4 lesioni con almeno 1 extra-pelvica/colonna oppure metastasi viscerali)
-            is_high_volume = ha_metastasi and ((num_lesioni_ossee >= 4) or flag_metastasi_viscerali)
-            
-            if ha_metastasi:
-                if is_high_volume:
-                    st.error(f"🔥 **Classificazione Automatica: ALTO VOLUME / HIGH-RISK** (Lesioni ossee: {num_lesioni_ossee}, Metastasi viscerali: {'Sì' if flag_metastasi_viscerali else 'No'}).")
-                else:
-                    st.warning(f"⚖️ **Classificazione Automatica: BASSO VOLUME / LOW-RISK** (Lesioni ossee: {num_lesioni_ossee}, Metastasi viscerali: {'Sì' if flag_metastasi_viscerali else 'No'}).")
-
-            st.markdown("---")
-            st.markdown("**3. Flag delle Comorbilità Mediche (per la scelta mirata dell'ARPI):**")
-            
-            col_c1, col_c2 = st.columns(2)
-            with col_c1:
-                flag_scompenso = st.checkbox("Scompenso cardiaco congestizio (ICC)")
-                flag_ipertensione = st.checkbox("Ipertensione arteriosa severa / mal controllata")
-                flag_diabete = st.checkbox("Diabete mellito (in particolare scompensato)")
-            with col_c2:
-                flag_epilessia = st.checkbox("Storia di epilessia / crisi convulsive / rischio neurologico")
-                flag_politerapia = st.checkbox("Politerapia complessa / rischio interazioni CYP450")
-                flag_fragilita = st.checkbox("Decadimento cognitivo / fragilità geriatrica")
-
-            st.markdown("---")
-            st.markdown("**4. Valutazione di Fitness per la Chemioterapia (Docetaxel):**")
-            paziente_fit_ct = st.radio(
-                "Il paziente è considerato FIT per la chemioterapia con Docetaxel?",
-                ["Sì, paziente fit (idoneo alla triplice terapia se alto volume)", "No, paziente UNFIT per chemioterapia (optare per doppietta)"],
-                horizontal=True
+        col_t1, col_t2, col_t3 = st.columns(3)
+        with col_t1:
+            t_stage = st.selectbox("Stadio T (Primario):", ["cT1c", "cT2a", "cT2b", "cT2c", "cT3a", "cT3b", "cT4"])
+        with col_t2:
+            n_stage = st.selectbox("Stadio N (Linfonodi Regionali):", ["cN0", "cN1", "cNX"])
+        with col_t3:
+            m_stage = st.selectbox(
+                "Stadio M (Metastasi a Distanza):", 
+                ["cM0 (Nessuna metastasi)", "cM1a (Linfonodi non regionali)", "cM1b (Ossee)", "cM1c (Viscerali / Altre)"]
             )
 
-            # --- MOTORE DECISIONALE AUTOMATICO (Terapia e ARPI) ---
-            st.markdown("### 💡 Suggerimento Terapeutico Basato su Linee Guida e Trial Clinici")
+        st.markdown("---")
+        st.markdown("**2. Dettaglio Metastasi e Criteri di Volume (CHAARTED / STAMPEDE):**")
+        
+        ha_metastasi = m_stage.startswith("cM1")
+        
+        num_lesioni_ossee = 0
+        flag_metastasi_viscerali = False
+        
+        if ha_metastasi:
+            st.error(f"🚨 **Quadro Rilevato:** Paziente **METASTATICO** in base allo stadio **{m_stage}**.")
             
-            consiglio_terapia = ""
-            if not ha_metastasi:
-                consiglio_terapia = "Terapia mirata / ADT +/- ARPI (setting M0 / nmCRPC)"
-                st.info(f"**Indicazione:** {consiglio_terapia}")
-            elif not is_high_volume:
-                consiglio_terapia = "Duplice Terapia (ADT + ARPI)"
-                st.warning(f"**Indicazione:** {consiglio_terapia}. Nei pazienti mHSPC a basso volume, i trial **ARCHES** (Enzalutamide) e **TITAN** (Apalutamide) dimostrano un beneficio netto con la duplice terapia; la chemioterapia aggiuntiva non è indicata di routine.")
-            else:
-                if "Sì" in paziente_fit_ct:
-                    consiglio_terapia = "Triplice Terapia (ADT + Docetaxel + ARPI)"
-                    st.error(f"**Indicazione:** {consiglio_terapia}. Sulla base dei trial **ARASENS** (con Darolutamide, Smith et al., NEJM 2022) e **PEACE-1** (con Abiraterone, Chi et al., Lancet 2022), nei pazienti mHSPC ad alto volume e fit per chemioterapia, la triplice terapia offre il massimo vantaggio di sopravvivenza globale (OS).")
-                else:
-                    consiglio_terapia = "Duplice Terapia (ADT + ARPI) - Paziente Unfit per CT"
-                    st.warning(f"**Indicazione:** {consiglio_terapia}. Poiché il paziente è valutato **UNFIT per la chemioterapia**, l'alternativa raccomandata consiste nella duplice terapia con ADT associata a un ARPI.")
-
-            # Scelta ARPI basata sui flag delle comorbilità
-            consiglio_arsi = ""
-            giustificazione_arsi = ""
+            num_lesioni_ossee = st.number_input(
+                "Numero esatto di lesioni ossee stimate (Inserire un valore da 1 a 50):", 
+                min_value=1, 
+                max_value=50, 
+                value=4,
+                step=1,
+                help="Valore discriminante: < 4 lesioni = Basso Volume; >= 4 lesioni = Alto Volume secondo CHAARTED/STAMPEDE."
+            )
             
-            if flag_epilessia:
-                consiglio_arsi = "Darolutamide o Apalutamide"
-                giustificazione_arsi = "Enzalutamide è sconsigliata per il rischio di abbassamento della soglia convulsa. Darolutamide presenta minima penetrazione della barriera emato-encefalica."
-            elif flag_scompenso or flag_ipertensione or flag_diabete:
-                consiglio_arsi = "Darolutamide o Enzalutamide"
-                giustificazione_arsi = "Cautela con Abiraterone Acetato in quanto richiede l'uso di prednisone e causa ritenzione di mineralcorticoidi, aggravando scompenso cardiaco, ipertensione e diabete."
-            elif flag_politerapia or flag_fragilita:
-                consiglio_arsi = "Darolutamide"
-                giustificazione_arsi = "Darolutamide è indicata per il basso profilo di interazioni farmacologiche epatiche (CYP450) e la minima penetrazione della barriera emato-encefalica (Trial ARAMIS / ARASENS)."
+            flag_metastasi_viscerali = st.checkbox(
+                "Presenti anche metastasi viscerali (es. fegato, polmone, pleura)?",
+                value=True if "cM1c" in m_stage else False
+            )
+        else:
+            st.info("🛡️ **Quadro Rilevato:** Paziente **NON METASTATICO (M0)**.")
+
+        is_high_volume = ha_metastasi and ((num_lesioni_ossee >= 4) or flag_metastasi_viscerali)
+        
+        if ha_metastasi:
+            if is_high_volume:
+                st.error(f"🔥 **Classificazione Automatica: ALTO VOLUME / HIGH-RISK** (Lesioni ossee: {num_lesioni_ossee}, Metastasi viscerali: {'Sì' if flag_metastasi_viscerali else 'No'}).")
             else:
-                consiglio_arsi = "Enzalutamide, Apalutamide, Darolutamide o Abiraterone"
-                giustificazione_arsi = "In assenza di comorbilità restrittive, tutti gli ARPI registrati sono valide opzioni in base ai trial ARCHES, TITAN, ARAMIS e LATITUDE."
+                st.warning(f"⚖️ **Classificazione Automatica: BASSO VOLUME / LOW-RISK** (Lesioni ossee: {num_lesioni_ossee} [< 4], Metastasi viscerali: No).")
 
-            st.success(f"**ARPI Consigliato:** {consiglio_arsi}\n\n**Giustificazione Clinica:** {giustificazione_arsi}")
+        st.markdown("---")
+        st.markdown("**3. Flag delle Comorbilità Mediche (per la scelta mirata dell'ARPI):**")
+        
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            flag_scompenso = st.checkbox("Scompenso cardiaco congestizio (ICC)")
+            flag_ipertensione = st.checkbox("Ipertensione arteriosa severa / mal controllata")
+            flag_diabete = st.checkbox("Diabete mellito (in particolare scompensato)")
+        with col_c2:
+            flag_epilessia = st.checkbox("Storia di epilessia / crisi convulsive / rischio neurologico")
+            flag_politerapia = st.checkbox("Politerapia complessa / rischio interazioni CYP450")
+            flag_fragilita = st.checkbox("Decadimento cognitivo / fragilità geriatrica")
 
-            st.markdown("---")
+        st.markdown("---")
+        st.markdown("**4. Valutazione di Fitness per la Chemioterapia (Docetaxel):**")
+        paziente_fit_ct = st.radio(
+            "Il paziente è considerato FIT per la chemioterapia con Docetaxel?",
+            ["Sì, paziente fit (idoneo alla triplice terapia se alto volume)", "No, paziente UNFIT per chemioterapia (optare per doppietta)"],
+            horizontal=True
+        )
+
+        st.markdown("### 💡 Suggerimento Terapeutico Basato su Linee Guida e Trial Clinici")
+        
+        consiglio_terapia = ""
+        if not ha_metastasi:
+            consiglio_terapia = "Terapia mirata / ADT +/- ARPI (setting M0 / nmCRPC)"
+            st.info(f"**Indicazione Terapeutica:** {consiglio_terapia}")
+        elif not is_high_volume:
+            consiglio_terapia = "Duplice Terapia (ADT + ARPI)"
+            st.warning(f"**Indicazione Terapeutica:** {consiglio_terapia}. Sulla base dello stadio metastatico a **BASSO VOLUME** ({num_lesioni_ossee} lesioni ossee), i trial **ARCHES** (Enzalutamide) e **TITAN** (Apalutamide) dimostrano un beneficio netto con la duplice terapia; la chemioterapia aggiuntiva non è indicata di routine.")
+        else:
+            if "Sì" in paziente_fit_ct:
+                consiglio_terapia = "Triplice Terapia (ADT + Docetaxel + ARPI)"
+                st.error(f"**Indicazione Terapeutica:** {consiglio_terapia}. Sulla base dello stadio metastatico ad **ALTO VOLUME** ({num_lesioni_ossee} lesioni ossee / metastasi viscerali) e della **fitness alla chemioterapia**, i trial **ARASENS** (con Darolutamide) e **PEACE-1** (con Abiraterone) raccomandano la triplice terapia per massimizzare la sopravvivenza globale (OS).")
+            else:
+                consiglio_terapia = "Duplice Terapia (ADT + ARPI) - Paziente Unfit per CT"
+                st.warning(f"**Indicazione Terapeutica:** {consiglio_terapia}. Nonostante la malattia sia ad **alto volume**, il paziente è valutato **UNFIT per la chemioterapia con Docetaxel**; pertanto l'alternativa clinica raccomandata è la duplice terapia con ADT associata a un ARPI.")
+
+        consiglio_arsi = ""
+        giustificazione_arsi = ""
+        
+        if flag_epilessia:
+            consiglio_arsi = "Darolutamide o Apalutamide"
+            giustificazione_arsi = "Enzalutamide è sconsigliata per il rischio di abbassamento della soglia convulsa. Darolutamide presenta minima penetrazione della barriera emato-encefalica."
+        elif flag_scompenso or flag_ipertensione or flag_diabete:
+            consiglio_arsi = "Darolutamide o Enzalutamide"
+            giustificazione_arsi = "Cautela con Abiraterone Acetato in quanto richiede l'uso di prednisone e causa ritenzione di mineralcorticoidi, aggravando scompenso cardiaco, ipertensione e diabete (Trial LATITUDE / ARCHES)."
+        elif flag_politerapia or flag_fragilita:
+            consiglio_arsi = "Darolutamide"
+            giustificazione_arsi = "Darolutamide è indicata per il basso profilo di interazioni farmacologiche epatiche (CYP450) e la minima penetrazione della barriera emato-encefalica (Trial ARAMIS / ARASENS)."
+        else:
+            consiglio_arsi = "Enzalutamide, Apalutamide, Darolutamide o Abiraterone"
+            giustificazione_arsi = "In assenza di comorbilità restrittive, tutti gli ARPI registrati sono valide opzioni in base ai trial ARCHES, TITAN, ARAMIS e LATITUDE."
+
+        st.success(f"**ARPI Consigliato:** {consiglio_arsi}\n\n**Giustificazione Clinica:** {giustificazione_arsi}")
+
+        st.markdown("---")
+        
+        with st.form(key="form_salvataggio_prima_visita"):
             psa_iniziale = st.number_input("Valore PSA Iniziale (ng/ml):", min_value=0.0, step=0.1, value=float(paziente.get("ultimo_psa", 0.0)))
             
             scelta_farmaco_finale = st.selectbox(
@@ -223,7 +219,6 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
                 st.session_state["ultimo_salvataggio_medico"] = codice_search
                 st.success("Prima visita medica salvata correttamente!")
 
-        # Download referto prima visita fuori dal form
         if st.session_state.get("ultimo_salvataggio_medico") == codice_search and paziente.get("visite"):
             ultima_v = paziente["visite"][-1]
             note_pdf_pv = [
@@ -247,7 +242,6 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
             )
 
     else:
-        # SEZIONE FOLLOW-UP
         st.subheader("Gestione Follow-up & Monitoraggio Periodico")
         
         with st.expander("🚨 Supporto Decisionale: Evidenze Trial Clinici (Triple/Double Therapy)", expanded=False):
@@ -346,7 +340,6 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
                 st.session_state["ultimo_salvataggio_medico"] = codice_search
                 st.success("Follow-up salvato correttamente!")
 
-        # Download fuori dal form per il follow-up
         if st.session_state.get("ultimo_salvataggio_medico") == codice_search and paziente.get("visite"):
             ultima_visita = paziente["visite"][-1]
             testo_psdt_pdf, _ = calcola_psdt_e_trend(paziente.get("visite", [])[:-1], paziente.get("ultimo_psa"), str(datetime.today().date()))
