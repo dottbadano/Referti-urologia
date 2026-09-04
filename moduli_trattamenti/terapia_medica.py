@@ -37,7 +37,7 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
             
         note_cliniche = st.text_area("Note Cliniche, Esami Strumentali di Controllo o Variazioni della Terapia:")
         
-        submitted = st.form_submit_button("Salva Visita Terapia Medica e Genera Report", type="primary")
+        submitted = st.form_submit_button("Salva Visita Terapia Medica", type="primary")
         
         if submitted:
             data_visita = str(datetime.today().date())
@@ -67,28 +67,32 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
             db_attivo[codice_search] = paziente
             salva_db_pazienti(db_attivo)
             st.session_state["db_pazienti"] = db_attivo
+            st.session_state["ultimo_salvataggio_medico"] = codice_search
             
             st.success("Dati di follow-up medico salvati correttamente nel database!")
-            
-            note_pdf = [
-                f"Schema Terapeutico: {tipo_trattamento_medico}",
-                f"Valore PSA di controllo: {valore_psa_attuale} ng/ml",
-                f"Stato Tossicità: Astenia ({astenia}), Vampate ({vampate})",
-                f"Note cliniche: {note_cliniche}"
-            ]
-            
-            pdf_bytes = genera_pdf_referto(
-                codice_search,
-                nuova_visita,
-                "Terapia Medica / Ormonale",
-                note_pdf,
-                nome=paziente.get('nome', ''),
-                cognome=paziente.get('cognome', '')
-            )
-            
-            st.download_button(
-                label="Scarica Referto Follow-up Medico PDF",
-                data=pdf_bytes,
-                file_name=f"FollowUp_Medico_{paziente.get('cognome', '')}_{codice_search}.pdf",
-                mime="application/pdf"
-            )
+
+    # --- DOWNLOAD FUORI DAL FORM ---
+    if st.session_state.get("ultimo_salvataggio_medico") == codice_search and paziente.get("visite"):
+        ultima_visita = paziente["visite"][-1]
+        note_pdf = [
+            f"Schema Terapeutico: {tipo_trattamento_medico}",
+            f"Valore PSA di controllo: {valore_psa_attuale} ng/ml",
+            f"Stato Tossicità: Astenia ({astenia}), Vampate ({vampate})",
+            f"Note cliniche: {note_cliniche}"
+        ]
+        
+        pdf_bytes = genera_pdf_referto(
+            codice_search,
+            ultima_visita,
+            "Terapia Medica / Ormonale",
+            note_pdf,
+            nome=paziente.get('nome', ''),
+            cognome=paziente.get('cognome', '')
+        )
+        
+        st.download_button(
+            label="Scarica Referto Follow-up Medico PDF",
+            data=pdf_bytes,
+            file_name=f"FollowUp_Medico_{paziente.get('cognome', '')}_{codice_search}.pdf",
+            mime="application/pdf"
+        )
