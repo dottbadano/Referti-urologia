@@ -13,17 +13,124 @@ from anamnesi_comune import (
     render_anagrafica_e_anamnesi_unificata,
     formatta_anamnesi_per_pdf_unificata
 )
-from moduli_trattamenti.terapia_medica import render_terapia_medica
 
-# Funzioni di fallback integrate per evitare errori di importazione mancanti
+def render_terapia_medica(paziente, db_attivo, codice_search):
+    st.subheader("Gestione Terapia Medica / Ormonale (ADT & NHA)")
+    st.info("Modulo di gestione della terapia medica e ormonale integrato con successo.")
+    
+    regime_attuale = paziente.get("regime_terapia_medica", "Nessuno")
+    nuovo_regime = st.selectbox(
+        "Seleziona o Aggiorna Regime Terapeutico:",
+        [
+            "Nessuno",
+            "Deprivazione Androgenica (ADT) Monoterapia",
+            "ADT + Antiandrogeno di prima generazione",
+            "ADT + Inibitore del pathway del recettore androgenico (NHA: Enzalutamide / Darolutamide / Apalutamide)",
+            "ADT + Abiraterone + Prednisone",
+            "Chemioterapia concomitante (Docetaxel) + ADT"
+        ]
+    )
+    
+    col_tm1, col_tm2 = st.columns(2)
+    with col_tm1:
+        data_inizio_tm = st.date_input("Data Inizio / Modifica Terapia", value=datetime.today().date())
+    with col_tm2:
+        psa_attuale_tm = st.number_input("Valore PSA Attuale (ng/ml)", value=paziente.get("ultimo_psa", 0.0), step=0.1)
+        
+    note_tm = st.text_area("Note Cliniche, Tollerabilità e Tossicità:")
+    
+    if st.button("Salva Aggiornamento Terapia Medica", type="primary"):
+        paziente["regime_terapia_medica"] = nuovo_regime
+        paziente["ultimo_psa"] = psa_attuale_tm
+        paziente["data_ultimo_psa"] = str(data_inizio_tm)
+        
+        dettagli_tm = f"Regime Terapia Medica: {nuovo_regime}\nData Inizio/Aggiornamento: {data_inizio_tm}\nPSA di controllo: {psa_attuale_tm} ng/ml\nNote: {note_tm}"
+        dati_v = {
+            "data": str(data_inizio_tm),
+            "tipo": "Follow-up / Aggiornamento Terapia Medica",
+            "dettagli": dettagli_tm
+        }
+        paziente.setdefault("visite", []).append(dati_v)
+        salva_db_pazienti(db_attivo)
+        st.session_state["db_pazienti"] = db_attivo
+        st.success("Terapia medica aggiornata e salvata nel database con successo!")
+
 def render_followup_sorveglianza_avanzato(paziente, db_attivo, codice_search):
-    st.info("Modulo Sorveglianza Attiva in fase di caricamento (Fallback integrato).")
+    st.subheader("Protocollo Sorveglianza Attiva (Active Surveillance)")
+    st.info("Gestione controlli seriati (PSA, RMN, Biopsie di conferma/seriali).")
+    
+    col_fs1, col_fs2 = st.columns(2)
+    with col_fs1:
+        psa_fs = st.number_input("Ultimo PSA di Controllo (ng/ml)", value=paziente.get("ultimo_psa", 0.0), step=0.1)
+    with col_fs2:
+        esito_biopsia_fu = st.selectbox("Stato / Esito Ulteriore Controllo Istologico", ["Non eseguito", "Stabile (ISUP confermato)", "Progressione di Rischio (Upgrading)", "Negativo per tumore"])
+        
+    note_fs = st.text_area("Note Cliniche Sorveglianza Attiva:")
+    
+    if st.button("Registra Controllo Sorveglianza", type="primary"):
+        paziente["ultimo_psa"] = psa_fs
+        dettagli_fs = f"Controllo Sorveglianza Attiva\nPSA: {psa_fs} ng/ml\nEsito Istologico/Bioptico: {esito_biopsia_fu}\nNote: {note_fs}"
+        dati_v = {
+            "data": str(datetime.today().date()),
+            "tipo": "Follow-up - Sorveglianza Attiva",
+            "dettagli": dettagli_fs
+        }
+        paziente.setdefault("visite", []).append(dati_v)
+        salva_db_pazienti(db_attivo)
+        st.session_state["db_pazienti"] = db_attivo
+        st.success("Controllo di sorveglianza registrato con successo!")
 
 def render_followup_chirurgia_avanzato(paziente, db_attivo, codice_search):
-    st.info("Modulo Chirurgia (Post-Prostatectomia) in fase di caricamento (Fallback integrato).")
+    st.subheader("Follow-up Post-Prostatectomia Radicale")
+    st.info("Monitoraggio del PSA post-operatorio (valutazione persistenza o recidiva biochimica).")
+    
+    col_fc1, col_fc2 = st.columns(2)
+    with col_fc1:
+        psa_post_op = st.number_input("Valore PSA Post-Chirurgia (ng/ml)", value=0.01, step=0.001, format="%.3f")
+    with col_fc2:
+        valutazione_continenza = st.selectbox("Stato Continenza Urinaria", ["Completamente continente", "Lieve incontinenza (1 pannolino/die)", "Incontinenza moderata/severa (>1 pannolino/die)"])
+        
+    valutazione_potenza = st.selectbox("Stato Funzione Erettile", ["Funzione preservata", "Deficit parziale", "Deficit severo / Disfunzione erettile"])
+    note_fc = st.text_area("Note Cliniche Post-Chirurgia:")
+    
+    if st.button("Registra Follow-up Chirurgico", type="primary"):
+        paziente["ultimo_psa"] = psa_post_op
+        dettagli_fc = f"Follow-up Post-Prostatectomia\nPSA: {psa_post_op} ng/ml\nContinenza: {valutazione_continenza}\nFunzione Erettile: {valutazione_potenza}\nNote: {note_fc}"
+        dati_v = {
+            "data": str(datetime.today().date()),
+            "tipo": "Follow-up - Post-Prostatectomia",
+            "dettagli": dettagli_fc
+        }
+        paziente.setdefault("visite", []).append(dati_v)
+        salva_db_pazienti(db_attivo)
+        st.session_state["db_pazienti"] = db_attivo
+        st.success("Follow-up chirurgico registrato con successo!")
 
 def render_followup_radioterapia_avanzato(paziente, db_attivo, codice_search):
-    st.info("Modulo Radioterapia in fase di caricamento (Fallback integrato).")
+    st.subheader("Follow-up Post-Radioterapia")
+    st.info("Monitoraggio clinico e biochimico post-irradiazione (Nadiral PSA, tossicità genito-urinaria e rettale).")
+    
+    col_fr1, col_fr2 = st.columns(2)
+    with col_fr1:
+        psa_post_rt = st.number_input("Valore PSA Post-Radioterapia (ng/ml)", value=paziente.get("ultimo_psa", 0.0), step=0.1)
+    with col_fr2:
+        tossicita_gu = st.selectbox("Tossicità Genito-Urinaria (RTOG)", ["Grado 0 (Assente)", "Grado 1 (Lieve)", "Grado 2 (Moderata)", "Grado 3+ (Severa)"])
+        
+    tossicita_gi = st.selectbox("Tossicità Gastro-Intestinale / Rettale (RTOG)", ["Grado 0 (Assente)", "Grado 1 (Lieve)", "Grado 2 (Moderata)", "Grado 3+ (Severa)"])
+    note_fr = st.text_area("Note Cliniche Post-Radioterapia:")
+    
+    if st.button("Registra Follow-up Radioterapico", type="primary"):
+        paziente["ultimo_psa"] = psa_post_rt
+        dettagli_fr = f"Follow-up Post-Radioterapia\nPSA: {psa_post_rt} ng/ml\nTossicità GU: {tossicita_gu}\nTossicità GI: {tossicita_gi}\nNote: {note_fr}"
+        dati_v = {
+            "data": str(datetime.today().date()),
+            "tipo": "Follow-up - Post-Radioterapia",
+            "dettagli": dettagli_fr
+        }
+        paziente.setdefault("visite", []).append(dati_v)
+        salva_db_pazienti(db_attivo)
+        st.session_state["db_pazienti"] = db_attivo
+        st.success("Follow-up radioterapico registrato con successo!")
 
 def genera_testo_patologia(gruppo_rischio, scelta_trattamento):
     testo_scelta = "Trattamento chirurgico di Prostatectomia Radicale" if scelta_trattamento == "Chirurgia (Post-Prostatectomia)" else scelta_trattamento
