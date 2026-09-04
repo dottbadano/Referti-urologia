@@ -54,44 +54,57 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
         st.markdown("### Inquadramento Iniziale, Stadiazione TNM e Stratificazione del Volume")
         
         with st.form(key="form_prima_visita_medica"):
-            st.markdown("**1. Stadiazione Clinica TNM Coerente:**")
+            st.markdown("**1. Stadiazione Clinica TNM:**")
             col_t1, col_t2, col_t3 = st.columns(3)
             with col_t1:
                 t_stage = st.selectbox("Stadio T (Primario):", ["cT1c", "cT2a", "cT2b", "cT2c", "cT3a", "cT3b", "cT4"])
             with col_t2:
                 n_stage = st.selectbox("Stadio N (Linfonodi Regionali):", ["cN0", "cN1", "cNX"])
             with col_t3:
-                m_stage = st.selectbox("Stadio M (Metastasi a Distanza):", ["cM0", "cM1a (Linfonodi non regionali)", "cM1b (Ossee)", "cM1c (Viscerali / Altre)"])
+                m_stage = st.selectbox(
+                    "Stadio M (Metastasi a Distanza):", 
+                    ["cM0 (Nessuna metastasi)", "cM1a (Linfonodi non regionali)", "cM1b (Ossee)", "cM1c (Viscerali / Altre)"]
+                )
 
             st.markdown("---")
             st.markdown("**2. Dettaglio Metastasi e Criteri di Volume (CHAARTED / STAMPEDE):**")
             
-            # Se M è M1b o M1c, lo segnaliamo coerentemente
-            ha_metastasi = "M1" in m_stage
+            # Riconoscimento robusto dello stato metastatico (M1)
+            ha_metastasi = m_stage.startswith("cM1")
             
             num_lesioni_ossee = 0
             flag_metastasi_viscerali = False
             
-            if "cM1b" in m_stage or "cM1c" in m_stage or ha_metastasi:
-                st.info(f"Quadro clinico metastatico rilevato da stadiazione ({m_stage}). Inserire dettagli di diffusione:")
-                if "cM1b" in m_stage or "cM1b" in str(m_stage):
-                    num_lesioni_ossee = st.number_input("Numero di lesioni ossee stimate (1 - 50):", min_value=0, max_value=50, value=1)
-                if "cM1c" in m_stage or st.checkbox("Presenti anche metastasi viscerali (es. fegato, polmone)?"):
-                    flag_metastasi_viscerali = True
-            
-            # Determinazione automatica High / Low volume secondo CHAARTED (>=4 lesioni con almeno 1 extra-assiale) o presenza viscerale
-            is_high_volume = (num_lesioni_ossee >= 4) or flag_metastasi_viscerali
+            if ha_metastasi:
+                st.markdown(f"✅ **Quadro Rilevato:** Paziente **METASTATICO** ({m_stage}). Inserire i parametri di estensione:")
+                
+                # Se è M1b o se l'utente seleziona M1 in generale, permettiamo di inserire le lesioni ossee
+                num_lesioni_ossee = st.number_input(
+                    "Numero di lesioni ossee stimate (Inserire un valore da 1 a 50):", 
+                    min_value=0, 
+                    max_value=50, 
+                    value=4 if "cM1b" in m_stage else 0,
+                    step=1
+                )
+                
+                flag_metastasi_viscerali = st.checkbox(
+                    "Presenti anche metastasi viscerali (es. fegato, polmone, pleura)?",
+                    value=True if "cM1c" in m_stage else False
+                )
+            else:
+                st.info("🛡️ **Quadro Rilevato:** Paziente **NON METASTATICO (M0)**.")
+
+            # Classificazione automatica High / Low volume (Criteri CHAARTED: >=4 lesioni con almeno 1 extra-pelvica/colonna oppure metastasi viscerali)
+            is_high_volume = ha_metastasi and ((num_lesioni_ossee >= 4) or flag_metastasi_viscerali)
             
             if ha_metastasi:
                 if is_high_volume:
-                    st.error("🔥 **Classificazione: ALTO VOLUME / HIGH-RISK** ( >=4 lesioni ossee o metastasi viscerali presenti).")
+                    st.error(f"🔥 **Classificazione Automatica: ALTO VOLUME / HIGH-RISK** (Lesioni ossee: {num_lesioni_ossee}, Metastasi viscerali: {'Sì' if flag_metastasi_viscerali else 'No'}).")
                 else:
-                    st.warning("⚖️ **Classificazione: BASSO VOLUME / LOW-RISK** (< 4 lesioni ossee e assenza di metastasi viscerali).")
-            else:
-                st.success("🛡️ **Classificazione: M0 (Non Metastatico)**.")
+                    st.warning(f"⚖️ **Classificazione Automatica: BASSO VOLUME / LOW-RISK** (Lesioni ossee: {num_lesioni_ossee}, Metastasi viscerali: {'Sì' if flag_metastasi_viscerali else 'No'}).")
 
             st.markdown("---")
-            st.markdown("**3. Flag delle Comorbidità Mediche (per la scelta dell'ARPI):**")
+            st.markdown("**3. Flag delle Comorbilità Mediche (per la scelta mirata dell'ARPI):**")
             
             col_c1, col_c2 = st.columns(2)
             with col_c1:
@@ -114,16 +127,14 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
             # --- MOTORE DECISIONALE AUTOMATICO (Terapia e ARPI) ---
             st.markdown("### 💡 Suggerimento Terapeutico Basato su Linee Guida e Trial Clinici")
             
-            # Scelta Doppietta vs Triplice
             consiglio_terapia = ""
             if not ha_metastasi:
                 consiglio_terapia = "Terapia mirata / ADT +/- ARPI (setting M0 / nmCRPC)"
                 st.info(f"**Indicazione:** {consiglio_terapia}")
             elif not is_high_volume:
                 consiglio_terapia = "Duplice Terapia (ADT + ARPI)"
-                st.warning(f"**Indicazione:** {consiglio_terapia}. Nei pazienti a basso volume di malattia mHSPC, i trial **ARCHES** (Enzalutamide) e **TITAN** (Apalutamide) dimostrano un beneficio netto con la duplice terapia; la chemioterapia aggiuntiva non è routinariamente raccomandata.")
+                st.warning(f"**Indicazione:** {consiglio_terapia}. Nei pazienti mHSPC a basso volume, i trial **ARCHES** (Enzalutamide) e **TITAN** (Apalutamide) dimostrano un beneficio netto con la duplice terapia; la chemioterapia aggiuntiva non è indicata di routine.")
             else:
-                # Alto volume
                 if "Sì" in paziente_fit_ct:
                     consiglio_terapia = "Triplice Terapia (ADT + Docetaxel + ARPI)"
                     st.error(f"**Indicazione:** {consiglio_terapia}. Sulla base dei trial **ARASENS** (con Darolutamide, Smith et al., NEJM 2022) e **PEACE-1** (con Abiraterone, Chi et al., Lancet 2022), nei pazienti mHSPC ad alto volume e fit per chemioterapia, la triplice terapia offre il massimo vantaggio di sopravvivenza globale (OS).")
@@ -131,13 +142,13 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
                     consiglio_terapia = "Duplice Terapia (ADT + ARPI) - Paziente Unfit per CT"
                     st.warning(f"**Indicazione:** {consiglio_terapia}. Poiché il paziente è valutato **UNFIT per la chemioterapia**, l'alternativa raccomandata consiste nella duplice terapia con ADT associata a un ARPI.")
 
-            # Scelta ARPI specifico basato sulle comorbilità (senza tendina ma con flag)
+            # Scelta ARPI basata sui flag delle comorbilità
             consiglio_arsi = ""
             giustificazione_arsi = ""
             
             if flag_epilessia:
                 consiglio_arsi = "Darolutamide o Apalutamide"
-                giustificazione_arsi = "Enzalutamide è controindicata/sconsigliata per il rischio di abbassamento della soglia convulsa. Darolutamide presenta minima penetrazione della barriera emato-encefalica."
+                giustificazione_arsi = "Enzalutamide è sconsigliata per il rischio di abbassamento della soglia convulsa. Darolutamide presenta minima penetrazione della barriera emato-encefalica."
             elif flag_scompenso or flag_ipertensione or flag_diabete:
                 consiglio_arsi = "Darolutamide o Enzalutamide"
                 giustificazione_arsi = "Cautela con Abiraterone Acetato in quanto richiede l'uso di prednisone e causa ritenzione di mineralcorticoidi, aggravando scompenso cardiaco, ipertensione e diabete."
@@ -146,7 +157,7 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
                 giustificazione_arsi = "Darolutamide è indicata per il basso profilo di interazioni farmacologiche epatiche (CYP450) e la minima penetrazione della barriera emato-encefalica (Trial ARAMIS / ARASENS)."
             else:
                 consiglio_arsi = "Enzalutamide, Apalutamide, Darolutamide o Abiraterone"
-                giustificazione_arsi = "In assenza di comorbilità restrittive, tutti gli ARPI registrati sono validi opzioni in base ai trial ARCHES, TITAN, ARAMIS e LATITUDE."
+                giustificazione_arsi = "In assenza di comorbilità restrittive, tutti gli ARPI registrati sono valide opzioni in base ai trial ARCHES, TITAN, ARAMIS e LATITUDE."
 
             st.success(f"**ARPI Consigliato:** {consiglio_arsi}\n\n**Giustificazione Clinica:** {giustificazione_arsi}")
 
@@ -182,6 +193,7 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
 
                 dettagli_pv = (
                     f"TNM: T={t_stage}, N={n_stage}, M={m_stage}\n"
+                    f"Stato Metastatico: {'Metastatico (M1)' if ha_metastasi else 'Non Metastatico (M0)'}\n"
                     f"Lesioni Ossee: {num_lesioni_ossee} | Metastasi Viscerali: {'Sì' if flag_metastasi_viscerali else 'No'}\n"
                     f"Volume: {'Alto Volume' if is_high_volume else 'Basso Volume / M0'}\n"
                     f"Fitness Chemioterapia: {paziente_fit_ct}\n"
@@ -216,6 +228,7 @@ def render_terapia_medica(paziente, db_attivo, codice_search):
             ultima_v = paziente["visite"][-1]
             note_pdf_pv = [
                 f"Stadiazione TNM: T={t_stage}, N={n_stage}, M={m_stage}",
+                f"Stato Clinico: {'Metastatico (M1)' if ha_metastasi else 'Non Metastatico (M0)'}",
                 f"Volume di Malattia: {'Alto Volume' if is_high_volume else 'Basso Volume/M0'} (Lesioni ossee: {num_lesioni_ossee})",
                 f"Indicazione Terapeutica Generata: {consiglio_terapia}",
                 f"ARPI Consigliato e Giustificato: {consiglio_arsi} ({giustificazione_arsi})",
