@@ -444,7 +444,7 @@ def render_modulo():
             st.warning("Inserisci il codice univoco del paziente per accedere al follow-up personalizzato.")
         else:
             if codice_search in db_attivo:
-                paziente = db_att_attivo = db_attivo[codice_search]
+                paziente = db_attivo[codice_search]
                 percorso_attuale = paziente.get("percorso_scelto", "Sorveglianza Attiva")
                 
                 st.success(f"Paziente Trovato: {paziente.get('cognome', '')} {paziente.get('nome', '')} (ID: {codice_search})")
