@@ -1,5 +1,13 @@
 from datetime import datetime
 import math
+import sys
+import os
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+moduli_path = os.path.join(current_dir, "moduli_trattamenti")
+if moduli_path not in sys.path:
+    sys.path.append(moduli_path)
+
 import streamlit as st
 from utils import (
     carica_db_pazienti,
@@ -13,20 +21,34 @@ from anamnesi_comune import (
     render_anagrafica_e_anamnesi_unificata,
     formatta_anamnesi_per_pdf_unificata
 )
-from terapia_medica import render_terapia_medica
 
-# Funzioni di fallback integrate per evitare errori di importazione mancanti
-def render_followup_sorveglianza_avanzato(paziente, db_attivo, codice_search):
-    st.info("Modulo Sorveglianza Attiva in fase di caricamento (Fallback integrato).[cite: 2]")
+# --- IMPORTAZIONI DEI MODULI REALI PRESENTI NEL REPOSITORY ---
+try:
+    from terapia_medica import render_terapia_medica
+except Exception:
+    def render_terapia_medica(paziente, db_attivo, codice_search):
+        st.info("Modulo Terapia Medica / Ormonale in fase di caricamento.")
 
-def render_followup_chirurgia_avanzato(paziente, db_attivo, codice_search):
-    st.info("Modulo Chirurgia (Post-Prostatectomia) in fase di caricamento (Fallback integrato).[cite: 2]")
+try:
+    from sorveglianza import render_followup_sorveglianza_avanzato
+except Exception:
+    def render_followup_sorveglianza_avanzato(paziente, db_attivo, codice_search):
+        st.info("Modulo Sorveglianza Attiva in fase di caricamento.")
 
-def render_followup_radioterapia_avanzato(paziente, db_attivo, codice_search):
-    st.info("Modulo Radioterapia in fase di caricamento (Fallback integrato).[cite: 2]")
+try:
+    from prostatectomia import render_followup_chirurgia_avanzato
+except Exception:
+    def render_followup_chirurgia_avanzato(paziente, db_attivo, codice_search):
+        st.info("Modulo Chirurgia (Post-Prostatectomia) in fase di caricamento.")
+
+try:
+    from radioterapia import render_followup_radioterapia_avanzato
+except Exception:
+    def render_followup_radioterapia_avanzato(paziente, db_attivo, codice_search):
+        st.info("Modulo Radioterapia in fase di caricamento.")
 
 def genera_testo_patologia(gruppo_rischio, scelta_trattamento):
-    testo_scelta = "Trattamento chirurgico di Prostatectomia Radicale" if scelta_trattamento == "Chirurgia (Post-Prostatectomia)" else scelta_trattamento[cite: 2]
+    testo_scelta = "Trattamento chirurgico di Prostatectomia Radicale" if scelta_trattamento == "Chirurgia (Post-Prostatectomia)" else scelta_trattamento
     
     if gruppo_rischio == "Basso Rischio":
         base = (
